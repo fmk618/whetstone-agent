@@ -1,4 +1,5 @@
 import { PageHeader } from '../components/PageHeader'
+import { CountUp, Reveal } from '../components/Motion'
 
 /* -----
  * 占位数据,结构对齐后端方案 7.1(profile.py 的 ExtractionResult):
@@ -163,15 +164,15 @@ const weakCompetencyCount = COMPETENCIES.filter(
 function SummaryStrip() {
   return (
     <div
-      className="mb-5 grid grid-cols-3 overflow-hidden rounded-[10px] border"
+      className="mb-8 grid grid-cols-1 sm:grid-cols-3 overflow-hidden rounded-[10px] border"
       style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-elevated)' }}
     >
       {[
-        { label: '能力项', value: String(COMPETENCIES.length), hint: '来自 3 份文档' },
-        { label: '证据声明', value: String(totalClaims), hint: `其中 ${strongClaimCount} 条带量化指标` },
+        { label: '能力项', parsed: COMPETENCIES.length, hint: '来自 3 份文档' },
+        { label: '证据声明', parsed: totalClaims, hint: `其中 ${strongClaimCount} 条带量化指标` },
         {
           label: '弱证据能力',
-          value: String(weakCompetencyCount),
+          parsed: weakCompetencyCount,
           hint: '面试时会被验证,优先复习',
           warn: weakCompetencyCount > 0,
         },
@@ -181,12 +182,11 @@ function SummaryStrip() {
           className="px-5 py-4"
           style={i > 0 ? { borderLeft: '1px solid var(--border)' } : undefined}
         >
-          <div
-            className="tnum text-2xl font-semibold leading-7"
+          <CountUp
+            className="inline-block text-2xl font-semibold leading-7"
             style={cell.warn ? { color: 'var(--warning)' } : undefined}
-          >
-            {cell.value}
-          </div>
+            value={cell.parsed}
+          />
           <div className="mt-1 text-sm font-medium">{cell.label}</div>
           <div className="mt-0.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
             {cell.hint}
@@ -197,10 +197,10 @@ function SummaryStrip() {
   )
 }
 
-function CompetencyCard({ c }: { c: CompetencyProfile }) {
+function CompetencyCard({ c, revealIndex }: { c: CompetencyProfile; revealIndex: number }) {
   const type = TYPE_META[c.type]
   return (
-    <article className="card flex flex-col">
+    <Reveal index={revealIndex} as="article" className="card card-raised flex flex-col">
       <header className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-base font-semibold leading-snug">{c.competency}</h2>
@@ -230,7 +230,7 @@ function CompetencyCard({ c }: { c: CompetencyProfile }) {
           )
         })}
       </ul>
-    </article>
+    </Reveal>
   )
 }
 
@@ -249,9 +249,9 @@ export default function ProfilePage() {
 
       <SummaryStrip />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {COMPETENCIES.map((c) => (
-          <CompetencyCard key={c.competency} c={c} />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        {COMPETENCIES.map((c, i) => (
+          <CompetencyCard key={c.competency} c={c} revealIndex={i} />
         ))}
       </div>
     </div>

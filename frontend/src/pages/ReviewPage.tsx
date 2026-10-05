@@ -1,4 +1,5 @@
 import { PageHeader } from '../components/PageHeader'
+import { CountUp, Reveal } from '../components/Motion'
 
 /* -----
  * 占位数据,结构对齐后端方案 7.8(review_queue 表:competency / due_on / done,
@@ -81,36 +82,39 @@ function StatCards() {
   const cells = [
     {
       label: '今日待复习',
-      value: String(DUE_COUNT),
+      parsed: DUE_COUNT,
+      suffix: '',
       detail: '1 / 3 / 7 天间隔到期',
       accent: true,
     },
     {
       label: '薄弱能力',
-      value: String(WEAK.length),
+      parsed: WEAK.length,
+      suffix: '',
       detail: '正确率低于 75% 的能力项',
       accent: false,
     },
     {
       label: '7 日正确率',
-      value: `${WEEKLY_ACCURACY}%`,
+      parsed: WEEKLY_ACCURACY,
+      suffix: '%',
       detail: '近一周作答的平均分(0-100 折算)',
       accent: false,
     },
   ]
   return (
-    <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
       {cells.map((c) => (
-        <div key={c.label} className="card px-5 py-4">
+        <div key={c.label} className="card card-raised px-5 py-5">
           <div className="text-xs" style={{ color: 'var(--fg-muted)' }}>
             {c.label}
           </div>
-          <div
-            className="tnum mt-1.5 text-3xl font-semibold leading-9"
+          <CountUp
+            className="mt-1.5 inline-block text-3xl font-semibold leading-9"
             style={c.accent ? { color: 'var(--accent)' } : undefined}
-          >
-            {c.value}
-          </div>
+            value={c.parsed}
+            suffix={c.suffix}
+          />
           <div className="mt-1 text-xs" style={{ color: 'var(--fg-subtle)' }}>
             {c.detail}
           </div>
@@ -131,10 +135,10 @@ function QueueList() {
       </header>
 
       <ul className="flex flex-col divide-y" style={{ borderColor: 'var(--border)' }}>
-        {QUEUE.map((q) => {
+        {QUEUE.map((q, i) => {
           const overdue = q.due_on < '2026-10-05'
           return (
-            <li key={q.question_id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center" style={{ borderColor: 'var(--border)' }}>
+            <Reveal key={q.question_id} index={i} as="li" className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center" style={{ borderColor: 'var(--border)' }}>
               <div className="min-w-0 flex-1">
                 <p className="text-sm leading-relaxed">{q.question}</p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
@@ -151,7 +155,7 @@ function QueueList() {
                 </div>
               </div>
               <button className="btn btn-ghost btn-sm shrink-0 sm:ml-4">开始复习</button>
-            </li>
+            </Reveal>
           )
         })}
       </ul>
@@ -170,10 +174,10 @@ function WeakRank() {
       </header>
 
       <ul className="flex flex-col gap-4">
-        {WEAK.map((w) => {
+        {WEAK.map((w, i) => {
           const pct = Math.round(w.accuracy)
           return (
-            <li key={w.competency}>
+            <Reveal key={w.competency} index={i} as="li">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-medium">{w.competency}</span>
                 <span className="tnum text-xs" style={{ color: 'var(--fg-muted)' }}>
@@ -181,7 +185,7 @@ function WeakRank() {
                 </span>
               </div>
               <div
-                className="mt-1.5 h-1.5 overflow-hidden rounded-full"
+                className="bar-grow mt-1.5 h-1.5 overflow-hidden rounded-full"
                 style={{ backgroundColor: 'var(--bg-inset)' }}
                 role="progressbar"
                 aria-valuenow={pct}
@@ -197,7 +201,7 @@ function WeakRank() {
                   }}
                 />
               </div>
-            </li>
+            </Reveal>
           )
         })}
       </ul>
@@ -217,7 +221,7 @@ export default function ReviewPage() {
         description="按能力项记录正确率,低分题自动进入间隔复习队列"
       />
       <StatCards />
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <QueueList />
         <WeakRank />
       </div>

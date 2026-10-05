@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { WipPlaceholder } from '../components/PageHeader'
+import { Reveal } from '../components/Motion'
 
 /* -----
  * 占位数据,结构对齐后端方案 7.2:
@@ -75,7 +76,7 @@ function JdEditor() {
   const pct = Math.round(MATCH.confidence * 100)
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className="card">
         <h2 className="mb-1 text-base font-semibold">岗位描述</h2>
         <p className="mb-3 text-xs" style={{ color: 'var(--fg-subtle)' }}>
@@ -205,19 +206,21 @@ function MatrixTable() {
           </tr>
         </thead>
         <tbody>
-          {MATRIX.map((m) => {
+          {MATRIX.map((m, i) => {
             const meta = CATEGORY_META[m.category]
             const pct = Math.round(m.weight * 100)
             return (
-              <tr
+              <Reveal
                 key={m.name}
+                index={i}
+                as="tr"
                 className="border-b last:border-b-0"
                 style={{ ...(m.category === 'D' ? { opacity: 0.55 } : undefined), borderColor: 'var(--border)' }}
               >
                 <td className="py-2.5 pr-4">{m.name}</td>
                 <td className="py-2.5 pr-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-1.5 min-w-24 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--bg-inset)' }}>
+                    <div className="bar-grow h-1.5 min-w-16 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--bg-inset)' }}>
                       <div
                         className="h-full rounded-full"
                         style={{
@@ -234,7 +237,7 @@ function MatrixTable() {
                 <td className="py-2.5">
                   <span className={`badge ${meta.badge}`}>{meta.label}</span>
                 </td>
-              </tr>
+              </Reveal>
             )
           })}
         </tbody>
@@ -250,7 +253,7 @@ export default function JobPage() {
         title="目标岗位"
         description="粘贴岗位 JD,归一为标准职业并生成能力矩阵,驱动出题与面试方向"
       />
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6 lg:gap-8">
         <JdEditor />
         <MatrixTable />
       </div>

@@ -48,7 +48,7 @@ export default function SettingsPage() {
         }
       />
 
-      <section className="card mb-4">
+      <section className="card mb-8 p-5 md:p-6">
         <h2 className="mb-3 text-base font-semibold">模型 Providers</h2>
 
         {isLoading ? (
@@ -123,7 +123,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="card">
-        <h2 className="mb-3 text-base font-semibold">路由策略</h2>
+        <h2 className="mb-4 text-base font-semibold">路由策略</h2>
         <WipPlaceholder label="local_only / 云端路由配置(/api/settings/routing)" />
       </section>
     </div>
