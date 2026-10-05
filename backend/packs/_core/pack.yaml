@@ -1,0 +1,18 @@
+# 通用行业包:适用于所有岗位的核心题族与能力库
+id: _core
+name: 通用(所有岗位)
+question_families:
+  - self_intro        # 自我介绍
+  - motivation        # 求职动机
+  - star_behavior     # STAR 行为面试
+  - teamwork          # 团队协作
+  - conflict          # 冲突处理
+  - situational_judgment  # 情境判断
+competencies:
+  - { name: 表达结构, weight: 0.1 }
+  - { name: 职业动机, weight: 0.15 }
+  - { name: 团队协作, weight: 0.15 }
+  - { name: 抗压与应变, weight: 0.15 }
+  - { name: 自我认知, weight: 0.1 }
+  - { name: 岗位匹配, weight: 0.2 }
+  - { name: 学习成长, weight: 0.15 }

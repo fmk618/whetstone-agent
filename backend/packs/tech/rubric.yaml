@@ -1,0 +1,7 @@
+# 互联网/IT 包评分维度:总分 100
+dims:
+  - { name: 技术准确性, weight: 35 }
+  - { name: 深度与原理, weight: 20 }
+  - { name: 场景落地, weight: 20 }
+  - { name: 表达结构, weight: 15 }
+  - { name: 个人经历结合, weight: 10 }

@@ -1,0 +1,6 @@
+# 通用包评分维度:总分 100
+dims:
+  - { name: 结构清晰, weight: 30 }
+  - { name: 真实性, weight: 25 }
+  - { name: 结果与量化, weight: 25 }
+  - { name: 岗位关联, weight: 20 }

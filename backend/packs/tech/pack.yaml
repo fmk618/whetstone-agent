@@ -1,0 +1,17 @@
+# 互联网/IT 行业包:技术岗面试题族与能力库
+id: tech
+name: 互联网/IT
+question_families:
+  - principle          # 原理题
+  - scenario           # 场景题
+  - system_design      # 系统设计
+  - project_probing    # 项目深挖
+  - debugging          # 问题排查
+competencies:
+  - { name: 计算机基础, weight: 0.1 }
+  - { name: 编程语言与框架, weight: 0.2 }
+  - { name: 系统设计, weight: 0.2 }
+  - { name: 数据库, weight: 0.1 }
+  - { name: 工程实践, weight: 0.15 }
+  - { name: 问题排查, weight: 0.15 }
+  - { name: 项目深挖, weight: 0.1 }
