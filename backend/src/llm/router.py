@@ -31,7 +31,8 @@ class Router:
     def __init__(self, registry: Registry):
         self.registry = registry
 
-    def route(self, role: str, *, sens_confirmed: bool = False) -> RouteDecision:
+    def route(self, role: str, *, sens_confirmed: bool = False,
+              sens_markers: list[str] | None = None) -> RouteDecision:
         if role not in ROLES:
             raise ValueError(f"未知角色: {role}")
         entry = (settings.yaml_data.get("routing") or {}).get(role)
@@ -39,21 +40,24 @@ class Router:
             raise ValueError(f"settings.yaml 未配置角色路由: {role}")
         provider_id, model = entry["provider"], entry["model"]
         is_local = self.registry.is_local(provider_id)
-        if not is_local and not sens_confirmed:
-            # 方案 4.6 与计划修订:无本地模型时不硬阻塞,由调用方(UX 层)确认后带 sens_confirmed 传入
+        # 隐私策略:仅当调用方声明本次请求含 local_only 敏感内容(sens_markers)且
+        # 目标是云端时,才要求用户知情确认。普通问答/出题不涉及原文,直接放行。
+        if not is_local and sens_markers and not sens_confirmed:
             raise PrivacyNotConfirmed(provider_id)
         return RouteDecision(provider_id=provider_id, model=model, is_local=is_local)
 
     async def chat(self, role: str, messages: list[ChatMessage],
-                   *, sens_confirmed: bool = False, **kw) -> str:
-        d = self.route(role, sens_confirmed=sens_confirmed)
+                   *, sens_confirmed: bool = False,
+                   sens_markers: list[str] | None = None, **kw) -> str:
+        d = self.route(role, sens_confirmed=sens_confirmed, sens_markers=sens_markers)
         provider = self.registry.get(d.provider_id)
         if provider is None:
             raise ValueError(f"路由指向的厂商不存在: {d.provider_id}(请在设置页检查)")
         return await provider.chat(messages, model=d.model, **kw)
 
-    async def embed(self, texts: list[str], *, sens_confirmed: bool = False) -> list[list[float]]:
-        d = self.route("embed", sens_confirmed=sens_confirmed)
+    async def embed(self, texts: list[str], *, sens_confirmed: bool = False,
+                    sens_markers: list[str] | None = None) -> list[list[float]]:
+        d = self.route("embed", sens_confirmed=sens_confirmed, sens_markers=sens_markers)
         provider = self.registry.get(d.provider_id)
         if provider is None:
             raise ValueError(f"路由指向的厂商不存在: {d.provider_id}")

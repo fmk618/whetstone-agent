@@ -85,7 +85,8 @@ class OpenAICompatProvider:
         elif json_schema and self.capabilities.json_object:
             request_kw["response_format"] = {"type": "json_object"}
         resp = await self._client.chat.completions.create(**request_kw)
-        return self._extract_content(resp)
+        # ChatCompletion 传 message;留兼容:非分块响应统一取 .message
+        return self._extract_content(resp.choices[0].message)
 
     async def stream(self, messages: list[ChatMessage], *, model: str,
                      temperature: float = 0.3, **kw) -> AsyncIterator[str]:
