@@ -1,0 +1,30 @@
+providers:
+  - id: qwen
+    type: openai_compatible
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key_env: DASHSCOPE_API_KEY
+    is_local: false
+  - id: doubao
+    type: openai_compatible
+    base_url: https://ark.cn-beijing.volces.com/api/v3
+    api_key_env: ARK_API_KEY
+    is_local: false
+    # model_params:
+    #   "<模型ID>": { extra_body: { thinking: { type: disabled } } }
+  - id: kimi
+    type: openai_compatible
+    base_url: https://api.moonshot.cn/v1
+    api_key_env: MOONSHOT_API_KEY
+    is_local: false
+    # model_params:
+    #   "<模型ID>": { locked: [temperature] }
+  - id: deepseek
+    type: openai_compatible
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+    is_local: false
+  - id: ollama
+    type: openai_compatible
+    base_url: http://localhost:11434/v1
+    api_key_env: null
+    is_local: true

@@ -1,0 +1,26 @@
+# 角色路由与检索参数。模型名一律可配置,不写死;示例条目需在设置页填入真实模型名。
+routing:
+  extract:   { provider: deepseek, model: "" }   # 简历/项目抽取;发云端有知情确认
+  generate:  { provider: deepseek, model: "" }
+  evaluate:  { provider: deepseek, model: "" }
+  interview: { provider: kimi, model: "" }
+  embed:     { provider: qwen, model: "" }       # 例: text-embedding-v4(维度 1024)
+
+chunk:
+  max_chars: 800
+  min_chars: 80
+
+retrieval:
+  vector_top: 20
+  bm25_top: 20
+  final_top: 5
+
+privacy:
+  # 检测到这些模式时文档默认标 local_only(云端发送需知情确认)
+  patterns:
+    phone: '(?<!\d)1[3-9]\d{9}(?!\d)'
+    email: '[\w.+-]+@[\w-]+\.[\w.-]+'
+    id_card: '(?<!\d)\d{17}[\dXx](?!\d)'
+    bank_card: '(?<!\d)\d{16,19}(?!\d)'
+embedded:
+  # (metadata) 记录向量库绑定的嵌入模型,更换需重建索引(方案 4.7)
