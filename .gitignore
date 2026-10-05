@@ -4,6 +4,7 @@
 .env.development
 .env.production
 *.env
+!.env.example
 
 # 数据与运行时产物
 data/
