@@ -31,36 +31,7 @@
 
 ## 🏗️ 架构
 
-```mermaid
-flowchart LR
-    subgraph client["前端 React 18 + Vite"]
-        UI["资料库 / 出题 / 面试 / 复习 / 设置"]
-    end
-    subgraph backend["后端 FastAPI(默认 127.0.0.1)"]
-        API["REST API<br/>docs / quiz / settings"]
-        RT["LLM Router<br/>角色路由 + 隐私闸门"]
-        IG["入库<br/>解析 / 敏感检测 / 切块"]
-        RS["混合检索<br/>向量 + BM25"]
-    end
-    subgraph store["本地存储 data/(不入 git)"]
-        DB[("SQLite")]
-        VS[("ChromaDB")]
-        RAW[("原始文件")]
-    end
-    subgraph llm["LLM 服务商(OpenAI 兼容)"]
-        C["云端:千问 / 豆包 / Kimi / DeepSeek"]
-        L["本地:Ollama / LM Studio"]
-    end
-
-    UI -- "/api/* 代理" --> API
-    API --> IG --> RS
-    API --> RT
-    IG --> DB & VS & RAW
-    RS --> VS
-    RT -- "local_only 未确认 → 409" --> API
-    RT --> C
-    RT --> L
-```
+![架构图](docs/architecture.png)
 
 - **多服务商切换**:`extract` / `generate` / `evaluate` / `interview` / `embed` 五个角色独立路由,每个角色可绑定不同厂商与模型(如"评分用 DeepSeek、嵌入用本地 Ollama"),改 `settings.yaml` 或设置页即可,不重启代码。
 - **隐私路由**:命中敏感模式的内容默认 `local_only`,仅本地推理;确需发云端时,后端返回 409,前端弹知情确认后携带 `confirm_cloud=true` 重发,后端校验通过才放行。
