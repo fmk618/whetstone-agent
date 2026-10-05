@@ -24,7 +24,7 @@ FRONTEND_DIST = BACKEND_ROOT.parent / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # host 固定 127.0.0.1(方案 4.9:公网部署必须经反代 + HTTPS + 认证);端口读配置
-    from .config import settings
+    from ..config import settings
     logger.info("Whetstone API 监听地址: http://%s:%s (host 固定 127.0.0.1,"
                 " 公网部署请走反向代理 + HTTPS + 认证)", settings.host, settings.port)
     yield
