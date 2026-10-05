@@ -31,3 +31,8 @@ frontend/dist/
 .idea/
 .vscode/
 *.log
+
+# 本地 AI 辅助配置(skills 是个人工具链,不入仓库)
+.claude/skills/
+.claude/settings.local.json
+.mcp.json

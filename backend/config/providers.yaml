@@ -16,6 +16,8 @@ providers:
     base_url: https://api.moonshot.cn/v1
     api_key_env: MOONSHOT_API_KEY
     is_local: false
+    model_params:
+      "*": { temperature: 1.0 }   # Kimi 新模型(部分)仅允许 temperature=1
     # model_params:
     #   "<模型ID>": { locked: [temperature] }
   - id: deepseek
