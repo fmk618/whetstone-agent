@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* ---------- 设计 token(暗色友好的简洁样式) ---------- */
+:root {
+  --bg: #f6f7f9;
+  --bg-elevated: #ffffff;
+  --fg: #1f2430;
+  --fg-muted: #5b6472;
+  --border: #dde1e8;
+  --accent: #4f6ef7;
+  --accent-fg: #ffffff;
+  --danger: #d5455d;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161c;
+    --bg-elevated: #1d2029;
+    --fg: #e6e9ef;
+    --fg-muted: #9aa3b2;
+    --border: #2c313d;
+    --accent: #7c93ff;
+    --accent-fg: #10131a;
+    --danger: #ff7488;
+  }
+}
+
+/* 让 bg-bg / text-fg / border-border 等工具类直接映射到上面的 CSS 变量 */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family:
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 通用小部件(手写组件类,避免重复样板) ---------- */
+.btn,
+.btn-primary,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    filter 0.15s ease;
+}
+
+.btn:disabled,
+.btn-primary:disabled,
+.btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--accent-fg);
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background-color: transparent;
+  color: var(--fg);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--bg-elevated);
+}
+
+.card {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+  padding: 20px;
+}
+
+.input {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background-color: var(--bg);
+  color: var(--fg);
+  padding: 6px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+/* 纯 CSS tooltip:hover 显示 data-tooltip 内容 */
+.tooltip-host {
+  position: relative;
+}
+
+.tooltip-host::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background-color: var(--fg);
+  color: var(--bg);
+  z-index: 20;
+}
+
+.tooltip-host:hover::after {
+  opacity: 1;
+}
