@@ -1,0 +1,32 @@
+# 环境变量与密钥(仓库里只提交 .env.example)
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# 数据与运行时产物
+data/
+app.db
+*.db-shm
+*.db-wal
+vectorstore/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# IDE / 日志
+.idea/
+.vscode/
+*.log
