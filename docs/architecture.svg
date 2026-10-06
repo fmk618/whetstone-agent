@@ -74,5 +74,4 @@
 
   <path d="M590 217 L510 307" class="branch"/>
   <path d="M820 217 L890 307" class="branch"/>
-  <text x="600" y="445" text-anchor="middle" class="note">默认本地优先：敏感资料只在本机处理，确需使用云端模型时先征得用户确认。</text>
 </svg>
