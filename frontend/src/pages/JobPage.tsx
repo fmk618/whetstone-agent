@@ -157,11 +157,10 @@ function JdEditor() {
 
 function CategoryLegend() {
   return (
-    <ul className="flex flex-wrap items-end gap-x-4 gap-y-1.5">
+    <ul className="flex flex-wrap items-end gap-x-2 gap-y-1.5">
       {(['A', 'B', 'C', 'D'] as MatchCategory[]).map((k) => (
-        <li key={k} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--fg-muted)' }}>
+        <li key={k}>
           <span className={`badge ${CATEGORY_META[k].badge}`}>{CATEGORY_META[k].label}</span>
-          {CATEGORY_META[k].desc}
         </li>
       ))}
     </ul>
