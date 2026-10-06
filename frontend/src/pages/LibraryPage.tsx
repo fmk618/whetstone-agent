@@ -337,9 +337,6 @@ function DocTable({
         <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
           上传第一份简历或项目文档,马上为它建档。出题、能力档案和模拟面试都会基于资料库生成。
         </p>
-        <p className="mt-2 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          推荐:先传简历(resume),再传目标岗位 JD(jd),可训练“Match 准确度”。
-        </p>
       </section>
     )
   }

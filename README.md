@@ -1,149 +1,236 @@
-# Whetstone(磨刀石)
+# Whetstone（磨刀石）
 
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![ChromaDB](https://img.shields.io/badge/VectorDB-ChromaDB-FF6F00)
-![License](https://img.shields.io/badge/License-Apache_2.0-blue)
+![License](https://img.shields.io/badge/License-Apache--2.0-blue)
 
-基于个人资料(简历、项目文档、学习笔记)的 RAG 面试陪练智能体:整理资料 → 检索取证出题 → 模拟面试与评分 → 薄弱点间隔复习。LLM 层支持多服务商自由切换(千问 / 豆包 / Kimi / DeepSeek / Ollama 等,国内厂商优先),隐私优先,数据默认不出本机。
+> **Whetstone 是一个本地优先的个人面试与学习陪练工具：把简历、项目文档和笔记变成可检索的证据，再用于出题、评分和复习。**
 
-## ✨ 功能特性
+项目面向希望掌控个人资料与模型服务商选择的求职者、学习者和个人开发者。它不是通用的公开面试平台，也不要求把所有资料上传到同一个云端服务。
 
-**✅ 已实现**
+## 解决什么问题
 
-- **多服务商 LLM 抽象层** — 统一 `openai_compatible` 协议,预置千问 / 豆包 / Kimi / DeepSeek / Ollama,任意 OpenAI 兼容接口均可经设置页添加;模型名一律可配置不写死;结构化输出带能力降级链。
-- **资料整理入库** — PDF(PyMuPDF)/ Markdown 解析,敏感信息检测,切块向量化后存入 ChromaDB;同一文件重复上传自动跳过,支持一键重建索引(嵌入模型更换时自动重嵌入)。
-- **混合检索** — 向量 + BM25 融合取 Top5,`personal` / `reference` 双集合;题目与证据均可溯源到具体文件的 file / section。
-- **多服务商设置页** — 服务商增删改、连通性实测(list_models)、角色路由在线调整;接口永不回传明文 Key。
-- **API 与前端骨架** — FastAPI 20 个端点(资料 / 会话 / 设置);React 18 + Vite + TypeScript 严格模式 + Tailwind v4,7 个页面路由;前端构建产物可由后端直接托管。
+准备面试时，资料通常分散在简历、项目复盘、学习笔记和参考资料中，常见问题包括：
 
-**🚧 进行中**
+- 面试题与个人经历脱节，无法追溯题目依据；
+- 资料有个人联系方式等敏感内容，却难以判断哪些内容会发送到云端；
+- 不同模型服务商的接口、模型名和能力差异导致切换成本高；
+- 作答后的反馈没有沉淀为下一轮复习计划。
 
-- **出题智能体** — 能力矩阵(岗位归一 → JD 关键词命中 → A/B/C/D 分级)→ 检索取证 → 结构化生成 + 余弦相似度去重闸门;生成与去重代码已就绪,API 接线中(端点暂返回 501)。
-- **评分智能体** — 对照参考答案与关键点,按行业包 rubric 维度加权打分、提取遗漏点;代码已就绪,同样待接线。
-- **复习闭环(后端)** — 按得分间隔排期(<60 分 1/3/7 天、60–79 分 3/7 天、≥80 分 7 天),今日复习队列查询 API 已可用;前端看板未接。
+Whetstone 通过本地文档库、混合检索、可配置的 LLM 角色路由和评分后的复习队列，处理上述链路中的资料组织、证据检索和练习闭环。当前更适合**单机个人使用和功能验证**，不包含多用户、账号体系或生产级公网部署能力。
 
-**📋 规划中**
+## 核心能力
 
-- **模拟面试** — 多轮追问链、SSE 流式输出、总结报告(`interview` 角色路由已预留)。
-- **复习看板前端**、更多行业包(财会金融 / 教师 / 医疗 / 体制内等)、国家职业技能标准接入。
+### 已实现
 
-## 🏗️ 架构
+- **资料入库与索引**：支持 PDF、Markdown 等资料上传；解析、敏感信息检测、切块、嵌入后写入本地 SQLite 与 ChromaDB。相同文件可跳过重复处理，也可重建索引。
+- **混合检索**：同时使用向量检索与 BM25，在 `personal`（简历、项目、笔记）和 `reference`（参考资料）两个集合中检索，并融合返回结果；结果保留文件名和章节出处。
+- **可配置 LLM 路由**：通过 `extract`、`generate`、`evaluate`、`interview`、`embed` 五个角色分别选择服务商和模型。当前适配器类型为 `openai_compatible`，可连接预置服务商或任意兼容接口。
+- **隐私闸门**：手机号、邮箱、身份证号、银行卡号等命中规则的资料默认标记为 `local_only`；若请求需要发送到云端，后端先返回 `409`，前端展示知情确认后才能继续。
+- **出题与去重**：基于能力项、岗位描述和检索证据生成结构化题目，题目包含关键点、难度、追问和出处，并用余弦相似度过滤重复题。
+- **作答评分与复习排期**：对照参考答案和行业包 rubric 评分，返回维度分、反馈和遗漏点；根据分数生成 1/3/7 天复习队列，并提供今日复习 API。
+- **练习会话管理**：支持创建、查看、删除和 JSON 导出 quiz/interview 会话，以及题目和作答记录的持久化。
+- **服务商设置**：设置页/API 支持服务商增删改、`list_models` 连通性测试和角色路由调整；接口只返回 Key 是否设置，不回传明文 Key。
+- **前端工作台**：React 18 + Vite + TypeScript + Tailwind CSS，包含资料库、知识档案、目标岗位、出题练习、模拟面试、复习和设置等页面入口。
 
-![架构图](docs/architecture.png)
+## 工作流程与架构
 
-- **多服务商切换**:`extract` / `generate` / `evaluate` / `interview` / `embed` 五个角色独立路由,每个角色可绑定不同厂商与模型(如"评分用 DeepSeek、嵌入用本地 Ollama"),改 `settings.yaml` 或设置页即可,不重启代码。
-- **隐私路由**:命中敏感模式的内容默认 `local_only`,仅本地推理;确需发云端时,后端返回 409,前端弹知情确认后携带 `confirm_cloud=true` 重发,后端校验通过才放行。
+典型的资料到练习流程如下：
 
-## 🚀 快速开始
+```mermaid
+flowchart LR
+    User[用户] --> Frontend[React 前端]
+    Frontend -->|Vite 代理 /api| API[FastAPI API]
 
-前置要求:**Python 3.11+**、**Node 18+**、[uv](https://docs.astral.sh/uv/)(推荐),以及任一服务商 API Key(或本地 Ollama,无需 Key)。
+    API --> Ingest[资料处理<br/>解析 · 敏感检测 · 切块 · 嵌入]
+    Ingest --> SQLite[(SQLite<br/>文档与练习记录)]
+    Ingest --> Chroma[(ChromaDB<br/>personal / reference)]
+
+    API --> Quiz[会话 · 出题 · 作答 · 评分 · 复习]
+    Quiz --> Retrieval[混合检索<br/>向量 + BM25]
+    Retrieval --> Chroma
+    Quiz --> Agents[Generator / Evaluator]
+    Agents --> Router[LLM Router<br/>角色路由 + 隐私闸门]
+    Ingest --> Router
+
+    Router --> Cloud[云端 OpenAI 兼容服务]
+    Router --> Local[本地 Ollama / LM Studio]
+```
+
+一次出题请求大致经过以下步骤：
+
+1. 资料先被解析、检测敏感信息并切块，嵌入后保存到本地向量库；
+2. 根据能力项、岗位描述和行业包计算题量，再到个人资料和参考资料集合中检索证据；
+3. `generate` 角色生成带出处的结构化题目，去重闸门过滤与已有题目过于相似的结果；
+4. 用户提交答案后，`evaluate` 角色按行业包 rubric 评分，并将复习到期日写入 SQLite；
+5. 每个角色均经过 Router 选择实际服务商；敏感资料发送云端前必须显式确认。
+
+## 功能边界与当前状态
+
+仓库当前的代码状态应按以下边界理解：
+
+- **出题和评分后端链路已可用**：相关 API 已连接 generator/evaluator，并有不联网的假服务商测试覆盖。
+- **资料上传不会自动完成能力声明抽取**：代码中已有能力声明的数据模型和 LLM 抽取器，但当前上传 API 主要负责解析、检测、切块和索引；出题 API 需要数据库中已有 `profile_claims` 能力声明。知识档案页可以读取已有声明，但“上传后自动生成完整知识档案”尚未形成端到端流程。
+- **目标岗位页仍是前端演示**：岗位归一、能力矩阵和 A/B/C/D 分类有规则实现与测试，但当前没有对应的 JD API 接口，页面使用示例数据。
+- **模拟面试页仍是交互占位**：页面可以演示对话界面，但后端尚未提供多轮面试接口、SSE 流式追问和总结报告。
+- **复习 API 已有，复习看板尚未接入真实数据**：`GET /api/quiz/review/today` 可返回到期题目；前端复习页仍使用占位数据。
+- **PDF 扫描件暂不做 OCR**：系统可以识别疑似扫描 PDF 并提示，但无法从没有文本层的扫描件中提取内容。
+- **当前适配器只有 OpenAI 兼容协议**：服务商可配置和切换，但没有各云厂商的专用 SDK 适配器；BM25 当前在内存中构建，适合个人资料规模，不是面向大规模数据集的检索服务。
+
+## 快速开始
+
+### 环境要求
+
+- Python 3.11+
+- Node.js 18+
+- [uv](https://docs.astral.sh/uv/)（推荐用于后端依赖管理）
+- 至少一个可用的 OpenAI 兼容服务商；也可以只使用本地 Ollama/LM Studio
+
+### 1. 获取代码并启动后端
 
 ```bash
-git clone https://github.com/<your-name>/whetstone-agent.git
+git clone https://github.com/fmk618/whetstone-agent.git
 cd whetstone-agent
 
-# 后端
 cd backend
-cp .env.example .env.development   # Windows PowerShell 用 copy;填入至少一个真实 Key
+```
+
+复制环境变量模板。Windows PowerShell 可执行：
+
+```powershell
+Copy-Item .env.example .env.development
+```
+
+macOS/Linux 可执行：
+
+```bash
+cp .env.example .env.development
+```
+
+编辑 `backend/.env.development`，填入至少一个云端服务商 Key；使用本地服务商时可保持 Key 为空。然后安装依赖并启动 API：
+
+```bash
 uv sync
 uv run uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+```
 
-# 前端(另开一个终端)
+### 2. 启动前端
+
+另开一个终端，在项目根目录执行：
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-- 前端地址:<http://localhost:5173>(Vite 已把 `/api/*` 代理到后端,无跨域问题)
-- API 文档(Swagger):<http://127.0.0.1:8000/docs>
-- 不启动前端也可用命令行验证核心链路:
+打开：
+
+- 前端：<http://localhost:5173>
+- FastAPI 文档：<http://127.0.0.1:8000/docs>
+
+开发服务器会把前端的 `/api/*` 请求代理到 `127.0.0.1:8000`。构建前端后，若 `frontend/dist/` 存在，FastAPI 也会直接托管该目录。
+
+### 3. 验证核心检索链路
+
+配置好服务商后，可以用命令行验证“解析 → 入库 → 检索 → 带出处问答”：
 
 ```bash
 cd backend
-uv run python -m scripts.p0_check path/to/简历.pdf   # 入库 → 检索 → 带出处问答
+uv run --python 3.11 python -m scripts.p0_check path/to/resume.pdf
+# 或
+uv run --python 3.11 python -m scripts.p0_check path/to/notes.md
 ```
 
-## ⚙️ 配置说明
+检测到敏感信息时，命令行会在发送云端前要求确认；疑似扫描 PDF 会提示当前版本没有 OCR。
 
-**环境变量与 Key**(`backend/.env.development` 本地 / `.env.production` 服务器,由 `APP_ENV` 决定加载哪个;两类文件均已被 `.gitignore` 排除,仓库只提交 `.env.example`):
+## 配置、隐私与安全
 
-| 环境变量 | 对应服务商 |
-| --- | --- |
-| `DASHSCOPE_API_KEY` | 千问(阿里云百炼) |
-| `ARK_API_KEY` | 豆包(火山方舟) |
-| `MOONSHOT_API_KEY` | Kimi(Moonshot) |
-| `DEEPSEEK_API_KEY` | DeepSeek |
+### 服务商与角色路由
 
-Ollama / LM Studio 等本地厂商不需要 Key。
+- `backend/config/providers.yaml` 保存服务商 ID、兼容接口地址和 Key 对应的环境变量名；默认预置千问、豆包、Kimi、DeepSeek、Ollama，并提供 Qianfan、LM Studio 等预设地址。
+- `backend/config/settings.yaml` 的 `routing` 段配置角色与模型，例如：
 
-**角色路由**(`backend/config/settings.yaml` 的 `routing` 段,或设置页 `PUT /api/settings/routing`):
+  ```yaml
+  routing:
+    generate: { provider: qwen, model: qwen-plus }
+    evaluate: { provider: ollama, model: your-local-model }
+    embed: { provider: qwen, model: your-embedding-model }
+  ```
 
-| 角色 | 用途 | 默认示例 |
-| --- | --- | --- |
-| `extract` | 简历 / 项目证据抽取 | qwen · qwen-plus |
-| `generate` | 出题 | qwen · qwen-plus |
-| `evaluate` | 作答评分 | qwen · qwen-plus |
-| `interview` | 模拟面试追问(预留) | qwen · qwen-plus |
-| `embed` | 文档向量化 | qwen · text-embedding |
+- 模型名称不写死在代码中。也可以通过设置页对应的 API 修改服务商和角色路由。
+- `.env.development`、`.env.production` 等文件只在本机加载，并已被 `.gitignore` 排除。可用变量包括 `DASHSCOPE_API_KEY`、`ARK_API_KEY`、`MOONSHOT_API_KEY` 和 `DEEPSEEK_API_KEY`。
 
-嵌入维度记录在向量库元数据中,更换嵌入模型需在设置页或 `POST /api/docs/reindex` 重建索引。
+### 默认的数据与隐私策略
 
-**支持的服务商**:预置 qwen / doubao / kimi / deepseek(云端)与 ollama / lm_studio / qianfan(预设条目);一切 OpenAI 兼容接口都能通过设置页以自定义 `base_url` 接入。
+- 默认监听 `127.0.0.1:8000`，运行时数据库、原始文件和 ChromaDB 位于项目根目录的 `data/`，该目录不提交到 Git。
+- 上传内容会按 `backend/config/settings.yaml` 中的规则检测手机号、邮箱、身份证号和银行卡号。命中后默认标记 `local_only`；发送到云端需要通过 `confirm_cloud=true` 完成知情确认。
+- Key 只从环境变量或本机配置读取；设置接口只返回“已设置/未设置”，不会把明文 Key 返回给前端。
+- 若要公网部署，必须自行配置 HTTPS、反向代理和访问认证，并将 Key 放在服务端环境变量或安全的密钥管理系统中；当前项目默认配置不是多用户生产部署方案。
+- 本项目不保证第三方模型服务商的留存、训练或跨境策略。使用云端服务前，请自行阅读对应服务商的隐私条款。
 
-**行业包**(`backend/packs/`):每个包含 `pack.yaml`(题族 + 能力库)、`rubric.yaml`(评分维度)与 `prompts/`(出题、追问提示词)。内置 `_core`(通用:自我介绍、STAR 行为、求职动机等)与 `tech`(互联网/IT:原理、场景、系统设计、项目深挖等),按 `pack_id` 加载,可自行扩展新行业。
-
-## 🔒 隐私与安全
-
-- **默认只监听 `127.0.0.1`**(host 在代码中固定)。如需公网部署,必须自行配置反向代理 + HTTPS + 访问认证,风险自负(参考 `GET /api/settings/keyring-hint` 返回的部署提示)。
-- **敏感检测与知情确认**:上传文档自动检测手机号 / 邮箱 / 身份证 / 银行卡(模式见 `config/settings.yaml`),命中即默认标记 `local_only`;发送给云端厂商前强制知情确认。本地厂商不受此限制。
-- **Key 只存本机**:仅保存在本机 `.env.*` 文件或系统环境变量,不写入任何提交文件;设置相关接口只返回"已设置 / 未设置",绝不回传明文。
-- **数据不出本机**:SQLite、向量库、原始文档全部存放在 `data/` 目录,该目录已被 `.gitignore` 排除。
-
-## 📁 项目结构
+## 项目结构
 
 ```text
 whetstone-agent/
 ├── backend/
-│   ├── .env.example               # 环境变量模板(复制为 .env.development 后填 Key)
+│   ├── .env.example              # 环境变量模板
 │   ├── config/
-│   │   ├── providers.yaml         # 服务商预置(base_url / Key 环境变量名)
-│   │   └── settings.yaml          # 角色路由 / 切块与检索参数 / 隐私检测模式
-│   ├── packs/
-│   │   ├── _core/                 # 通用行业包(所有岗位)
-│   │   └── tech/                  # 互联网/IT 行业包
-│   ├── scripts/p0_check.py        # 命令行验收:入库 → 检索 → 带出处问答
+│   │   ├── providers.yaml        # OpenAI 兼容服务商预置
+│   │   └── settings.yaml         # 角色路由、切块、检索、隐私规则
+│   ├── scripts/
+│   │   └── p0_check.py           # 解析、入库、检索、带出处问答验收
 │   ├── src/
-│   │   ├── llm/                   # 多服务商抽象:registry / router(隐私闸门)/ openai_compat / 结构化输出
-│   │   ├── ingest/                # PDF·MD 解析、敏感检测、切块、能力画像
-│   │   ├── retrieval/             # ChromaDB 向量库 + BM25 混合检索
-│   │   ├── occupation/            # 岗位归一 + 能力矩阵(JD 关键词 → A/B/C/D 分级)
-│   │   ├── agents/                # generator(出题 + 去重闸门)/ evaluator(评分 + 复习排期)
-│   │   ├── api/                   # FastAPI 路由:docs / quiz / settings
-│   │   ├── packs_loader.py        # 行业包加载
-│   │   └── config.py / db.py      # 全局配置 / SQLite
-│   └── tests/                     # pytest:api / generator / ingest / llm
+│   │   ├── api/                  # FastAPI 入口及 docs/quiz/settings 路由
+│   │   ├── agents/               # 出题、去重、评分、复习排期
+│   │   ├── ingest/               # 文件解析、切块、敏感检测、能力模型
+│   │   ├── llm/                  # Provider、Router、结构化输出
+│   │   ├── occupation/           # 岗位映射与能力矩阵规则
+│   │   ├── retrieval/            # ChromaDB 与向量/BM25 混合检索
+│   │   ├── config.py             # 环境与运行时路径配置
+│   │   └── db.py                 # SQLite schema 与数据库封装
+│   └── tests/                    # API、出题、入库、LLM 路由测试
 ├── frontend/
-│   └── src/
-│       ├── pages/                 # 资料库 / 知识档案 / 目标岗位 / 出题练习 / 模拟面试 / 复习看板 / 设置
-│       ├── components/            # CloudConfirmDialog(云端知情确认弹窗)等
-│       └── api/                   # fetch 封装 + 最小类型
-├── data/                          # 运行时数据(gitignore):app.db / vectorstore/ / raw/
-└── LICENSE                        # Apache-2.0
+│   ├── src/
+│   │   ├── api/                  # fetch 封装与接口类型
+│   │   ├── components/           # 布局、提示、云端确认等组件
+│   │   └── pages/                # 资料库、档案、岗位、练习、面试、复习、设置
+│   ├── vite.config.ts            # Vite 开发服务器与 /api 代理
+│   └── package.json              # 前端脚本与依赖
+├── docs/
+│   └── architecture-diagram.html # 独立浏览器版架构图
+├── data/                         # 运行时数据，已被 gitignore 排除
+└── LICENSE                       # Apache License 2.0
 ```
 
-## 🗺️ 路线图
+## 开发与测试
 
-| 阶段 | 内容 | 状态 |
-| --- | --- | --- |
-| **P0** | LLM 抽象层 + 解析入库 + 检索问答 | ✅ 已完成 |
-| **P1** | 岗位解析 + 出题 + 前端骨架 | 🚧 **当前阶段**(能力矩阵、出题/评分智能体与检索链路已就绪,API 接线中) |
-| **P2** | 评分接入 + 设置页完善 | 🚧 设置页服务商管理与角色路由已上线 |
-| **P3** | 模拟面试:多轮追问、SSE 流式、总结报告 | 📋 规划中 |
-| **P4** | 复习闭环:薄弱点统计、复习队列、看板 | 📋 排期算法与队列 API 已有雏形 |
-| **P5** | 扩展与打磨:行业包扩充、职业标准接入、anthropic/gemini 适配器、检索重排调优、评测集 | 📋 持续推进 |
+后端测试使用 pytest 和 pytest-asyncio，测试通过夹具替换 LLM/嵌入服务，不需要真实 API Key：
 
-## 📄 License
+```bash
+cd backend
+uv sync
+uv run --python 3.11 pytest -q
+```
+
+常用的定向测试：
+
+```bash
+uv run --python 3.11 pytest tests/test_api_quiz_flow.py -q
+uv run --python 3.11 pytest tests/test_generator.py tests/test_ingest.py -q
+```
+
+前端类型检查和生产构建：
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+`npm run build` 会先执行 `tsc --noEmit`，再运行 Vite 构建。开发时可使用 `npm run dev`，构建产物可使用 `npm run preview` 预览。
+
+## 许可证
 
 本项目基于 [Apache License 2.0](LICENSE) 开源。

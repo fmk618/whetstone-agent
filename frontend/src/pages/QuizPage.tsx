@@ -32,11 +32,6 @@ const QUESTION_BADGE: Record<Layer, { label: string; badge: string }> = {
   domain: { label: '领域(开放)', badge: 'badge-success' },
 }
 
-const PACK_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '_core', label: '通用(所有岗位)' },
-  { value: 'tech', label: '互联网/IT' },
-]
-
 function DifficultyStars({ level }: { level: number }) {
   const clamped = Math.min(5, Math.max(1, Math.round(level || 1)))
   return (
@@ -292,7 +287,7 @@ function QuestionCard({
         <span className={`badge ${meta.badge}`}>{meta.label}</span>
         {question.pack ? (
           <span className="badge badge-neutral">
-            {PACK_OPTIONS.find((p) => p.value === question.pack)?.label ?? question.pack}
+            {question.pack}
           </span>
         ) : null}
         <span className="ml-auto">
@@ -363,7 +358,7 @@ function ErrorBar({ message, onRetry }: { message: string; onRetry: () => void }
   )
 }
 
-/** 生成题目工具条:层 / pack / 题数;点击「生成题目」→ 创建会话 + 拉题 */
+/** 生成题目工具条:层 / 题数;点击「生成题目」→ 创建会话 + 拉题 */
 function GenerateToolbar({
   onToast,
 }: {
@@ -371,7 +366,6 @@ function GenerateToolbar({
 }) {
   const queryClient = useQueryClient()
   const [layer, setLayer] = useState<Layer>('resume')
-  const [pack, setPack] = useState('tech')
   const [total, setTotal] = useState(3)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -399,7 +393,6 @@ function GenerateToolbar({
       //    confirm_cloud}(confirm_cloud 在 JSON body,不是 query)。
       const body: QuestionsIn = {
         layer,
-        pack_id: layer === 'core' ? undefined : pack,
         total,
       }
       const send = (o: { confirmCloud: boolean }) =>
@@ -458,16 +451,6 @@ function GenerateToolbar({
               { value: 'domain', label: '领域(知识点)' },
             ]}
             ariaLabel="层级(出题范围)"
-          />
-        </div>
-
-        <div className="min-w-[160px]">
-          <span className="field-label mb-1 block">行业包</span>
-          <Select
-            value={pack}
-            onChange={setPack}
-            options={PACK_OPTIONS}
-            ariaLabel="行业包"
           />
         </div>
 

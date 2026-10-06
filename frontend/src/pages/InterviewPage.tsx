@@ -1,51 +1,57 @@
-import { useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { get, post } from '../api/client'
 import { PageHeader } from '../components/PageHeader'
-import { CountUp } from '../components/Motion'
+import type { AnswerRecord, QuizSession } from '../api/types'
 
-/* -----
- * 占位:多轮对话式模拟面试(方案 7.6,后端 routes_interview.py,接 SSE 流式)。
- * 会话轮数等接后端后由 /api/interview/sessions 驱动。
- * ---- */
-
-interface Turn {
-  role: 'interviewer' | 'user'
-  text: string
+function SessionEmptyState({ onCreate, isCreating }: { onCreate: () => void; isCreating: boolean }) {
+  return (
+    <section className="card p-8 text-center md:p-10">
+      <svg
+        viewBox="0 0 24 24"
+        width="34"
+        height="34"
+        fill="none"
+        stroke="var(--fg-subtle)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="mx-auto"
+      >
+        <path d="M4.5 5.5A2 2 0 0 1 6.5 3.5h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-4.5 3v-3.5h-.5a2 2 0 0 1-2-2v-9.5Z" />
+        <path d="M8 9h8M8 12.5h5" />
+      </svg>
+      <h2 className="mt-3 text-base font-semibold">暂无面试会话</h2>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
+        还没有后端保存的面试记录。创建一个会话后，页面会展示真实的题目和回答。
+      </p>
+      <button type="button" className="btn btn-primary mt-4" onClick={onCreate} disabled={isCreating}>
+        {isCreating ? '创建中…' : '创建面试会话'}
+      </button>
+    </section>
+  )
 }
 
-const INITIAL_TURNS: Turn[] = [
-  {
-    role: 'interviewer',
-    text: '你好,先做个自我介绍吧。结合你简历里最想让我记住的一两个项目讲,不用面面俱到。',
-  },
-  {
-    role: 'user',
-    text: '面试官好,我是张伟,做了五年多服务端,近三年主要在 Go 技术栈上。简历里最想让您记住的是风控研发外包平台:我把日均两百万事件的规则引擎改造成了规则加机器学习的双通道,平均延迟从三百毫秒压到八十毫秒。这个项目里我主导架构,也带队评审技术方案。',
-  },
-  {
-    role: 'interviewer',
-    text: '八十毫秒这个口径我追问一下:是 P99 还是均值?压到八十毫秒,高峰时段大约扛了多少峰值并发?',
-  },
-  {
-    role: 'user',
-    text: '是 P99,均值大概四十五毫秒。高峰时段峰值并发是平时的三倍,大约一万五 QPS,当时通过网关层做了双策略限流来保住 P99。',
-  },
-  {
-    role: 'interviewer',
-    text: '好。那为什么选 Redis Stream 替换 Kafka?百人团队滑雪运维成本,你做过什么具体的取舍?',
-  },
-]
+function ErrorState({ message, onRetry, isRetrying }: { message: string; onRetry: () => void; isRetrying: boolean }) {
+  return (
+    <section className="card p-5 md:p-6">
+      <p className="py-4 text-sm" style={{ color: 'var(--danger)' }}>
+        {message}
+      </p>
+      <button type="button" className="btn btn-ghost" onClick={onRetry} disabled={isRetrying}>
+        {isRetrying ? '重试中…' : '重试'}
+      </button>
+    </section>
+  )
+}
 
-const TOTAL_ROUNDS = 8
-/** 面试官气泡数即已完成的轮次 */
-const doneRounds = Math.floor(INITIAL_TURNS.filter((t) => t.role === 'interviewer').length)
-const roundClamp = Math.min(TOTAL_ROUNDS, Math.max(0, doneRounds))
-
-function Bubble({ turn }: { turn: Turn }) {
-  if (turn.role === 'interviewer') {
+function Bubble({ role, text }: { role: 'interviewer' | 'user'; text: string }) {
+  if (role === 'interviewer') {
     return (
       <div className="flex max-w-[85%] flex-col gap-1 self-start">
         <div className="card px-4 py-3 text-sm leading-relaxed" style={{ borderRadius: 12 }}>
-          {turn.text}
+          {text}
         </div>
         <span className="text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
           面试官
@@ -55,11 +61,8 @@ function Bubble({ turn }: { turn: Turn }) {
   }
   return (
     <div className="flex max-w-[85%] flex-col items-end gap-1 self-end">
-      <div
-        className="card px-4 py-3 text-sm leading-relaxed"
-        style={{ borderRadius: 12, backgroundColor: 'var(--bg-inset)' }}
-      >
-        {turn.text}
+      <div className="card px-4 py-3 text-sm leading-relaxed" style={{ borderRadius: 12, backgroundColor: 'var(--bg-inset)' }}>
+        {text}
       </div>
       <span className="text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
         我
@@ -68,94 +71,128 @@ function Bubble({ turn }: { turn: Turn }) {
   )
 }
 
-export default function InterviewPage() {
-  const [turns, setTurns] = useState<Turn[]>(INITIAL_TURNS)
-  const [draft, setDraft] = useState('')
-  const [round, setRound] = useState(roundClamp)
-  const scrollRef = useRef<HTMLDivElement>(null)
-
-  async function send() {
-    const text = draft.trim()
-    if (!text) return
-    setTurns((prev) => [...prev, { role: 'user', text }])
-    setDraft('')
-    // 占位:接后端后由 SSE 流式返回追问;此处回一条确认占位。
-    const nextRound = Math.min(TOTAL_ROUNDS, round + 1)
-    setTimeout(() => {
-      setTurns((prev) => [
-        ...prev,
-        {
-          role: 'interviewer',
-          text: `(占位反馈)收到。接后端后这里会根据你的回答流式生成追问,并逐轮计入评分维度。`,
-        },
-      ])
-      setRound(nextRound)
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-    }, 400)
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter 发送,Shift+Enter 换行
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault()
-      void send()
-    }
+function SessionTranscript({ session }: { session: QuizSession }) {
+  const questions = session.questions ?? []
+  if (!questions.length) {
+    return (
+      <section className="card p-8 text-center md:p-10">
+        <h2 className="text-base font-semibold">该会话暂无题目</h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
+          面试追问接口尚未返回题目，当前不会显示任何模拟对话。
+        </p>
+      </section>
+    )
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <section className="card flex flex-col gap-5 px-5 py-6 md:px-6" aria-label="面试对话区">
+      {questions.map((question) => {
+        const answers = question.answers ?? []
+        return (
+          <div key={question.id} className="contents">
+            <Bubble role="interviewer" text={question.question} />
+            {answers.map((answer: AnswerRecord) =>
+              answer.answer_text ? <Bubble key={answer.answer_id} role="user" text={answer.answer_text} /> : null,
+            )}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+export default function InterviewPage() {
+  const queryClient = useQueryClient()
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
+
+  const sessionsQuery = useQuery({
+    queryKey: ['quiz', 'sessions'],
+    queryFn: () => get<QuizSession[]>('/api/quiz/sessions'),
+  })
+
+  const interviewSessions = useMemo(
+    () => (sessionsQuery.data ?? []).filter((session) => session.kind === 'interview'),
+    [sessionsQuery.data],
+  )
+  const selectedSessionId = activeSessionId ?? interviewSessions[0]?.id ?? null
+  const sessionQuery = useQuery({
+    queryKey: ['quiz', 'interview-session', selectedSessionId],
+    queryFn: () => get<QuizSession>(`/api/quiz/sessions/${selectedSessionId}`),
+    enabled: selectedSessionId !== null,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: () => post<QuizSession>('/api/quiz/sessions', { kind: 'interview' }),
+    onSuccess: (session) => {
+      setActiveSessionId(session.id)
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+    },
+  })
+
+  const sessionsError = sessionsQuery.error instanceof Error ? sessionsQuery.error.message : ''
+
+  return (
+    <div>
       <PageHeader
         title="模拟面试"
         actions={
-          <>
-            <span
-              className="tnum badge badge-neutral"
-              aria-live="polite"
-            >
-              第 <CountUp value={round} duration={350} /> / {TOTAL_ROUNDS} 轮
-            </span>
-            <button className="btn btn-primary">结束并生成报告</button>
-          </>
+          interviewSessions.length > 0 ? (
+            <button type="button" className="btn btn-primary" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
+              {createMutation.isPending ? '创建中…' : '创建面试会话'}
+            </button>
+          ) : null
         }
       />
 
-      {/* 对话区。min-h-0 允许 flex 子项在竖向上触发滚动,避免整页塌陷 */}
-      <div
-        ref={scrollRef}
-        className="card flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-6 md:px-6"
-        style={{ minHeight: 0 }}
-        aria-label="面试对话区"
-      >
-        <div
-          className="mx-auto rounded-full px-3 py-1 text-xs"
-          style={{ backgroundColor: 'var(--bg-inset)', color: 'var(--fg-muted)' }}
-        >
-          会话开始 · 岗位:软件开发工程师 · 行业包:互联网 / IT
-        </div>
-        {turns.map((t, i) => (
-          <Bubble key={i} turn={t} />
-        ))}
-      </div>
-
-      {/* 输入区 */}
-      <footer className="mt-5 flex items-end gap-3">
-        <label className="sr-only" htmlFor="answer-input">
-          输入回答
-        </label>
-        <textarea
-          id="answer-input"
-          className="input flex-1 resize-none leading-relaxed"
-          style={{ minHeight: 44 }}
-          rows={1}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="输入回答……Enter 发送,Shift+Enter 换行"
+      {sessionsQuery.isLoading ? (
+        <section className="card p-5 md:p-6">
+          <p className="py-4 text-sm" style={{ color: 'var(--fg-muted)' }}>加载中…</p>
+        </section>
+      ) : sessionsQuery.isError ? (
+        <ErrorState
+          message={`读取面试会话失败，请确认后端已启动。${sessionsError}`}
+          onRetry={() => void sessionsQuery.refetch()}
+          isRetrying={sessionsQuery.isFetching}
         />
-        <button className="btn btn-primary" onClick={() => void send()} disabled={!draft.trim()}>
-          发送
-        </button>
-      </footer>
+      ) : interviewSessions.length === 0 ? (
+        <SessionEmptyState onCreate={() => createMutation.mutate()} isCreating={createMutation.isPending} />
+      ) : sessionQuery.isLoading ? (
+        <section className="card p-5 md:p-6">
+          <p className="py-4 text-sm" style={{ color: 'var(--fg-muted)' }}>加载会话内容…</p>
+        </section>
+      ) : sessionQuery.isError ? (
+        <ErrorState
+          message="读取面试内容失败，请稍后重试。"
+          onRetry={() => void sessionQuery.refetch()}
+          isRetrying={sessionQuery.isFetching}
+        />
+      ) : (
+        <>
+          {interviewSessions.length > 1 ? (
+            <label className="mb-4 block max-w-sm text-sm">
+              <span className="field-label mb-1 block">选择面试会话</span>
+              <select
+                className="input w-full"
+                value={selectedSessionId ?? ''}
+                onChange={(event) => setActiveSessionId(Number(event.target.value))}
+              >
+                {interviewSessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.title || `会话 ${session.id}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {sessionQuery.data ? <SessionTranscript session={sessionQuery.data} /> : null}
+        </>
+      )}
+
+      {createMutation.isError ? (
+        <p className="mt-3 text-sm" style={{ color: 'var(--danger)' }}>
+          创建面试会话失败，请稍后重试。
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -188,7 +188,25 @@ export interface ProviderInfo {
 
 /* ---------- 复习 /quiz/review ---------- */
 
+/** GET /api/quiz/review/today 返回的到期复习记录 */
+export interface ReviewQueueItem {
+  review_id: number
+  competency?: string | null
+  due_on: string
+  done: boolean
+  question_id: number
+  session_id: number
+  layer: QuizQuestion['layer']
+  pack?: string | null
+  difficulty: number
+  question: string
+  reference_answer?: string | null
+  key_points?: string[] | null
+  provenance?: Provenance | null
+}
+
+/** 兼容旧的汇总响应形状 */
 export interface ReviewToday {
   due_count: number
-  items?: unknown[]
+  items?: ReviewQueueItem[]
 }
