@@ -641,11 +641,11 @@ select.input {
   border-bottom: 1px solid var(--border-ink);
 }
 
-/* ---------- 导航:装订线 rail(单点 morph 胶囊) ----------
-   恒 64/56px 装订线;所有项静置 36×36 纯图标。胶囊态(当前页长显,
-   或点击迁移)图标位置不动,宽度向右膨胀,文字从图标旁淡入。
-   膨胀用 width 36px→max-content + 200ms 弹性曲线,overflow hidden,
-   文字 opacity/translate 过渡。 */
+/* ---------- 导航:装订线 rail(单点 morph 批注条浮层) ----------
+   恒 64/56px 装订线;所有项静置 36×36 纯图标。胶囊态(active 长显或点击
+   迁移)该 NavLink 自身保持 36×36 占位不变,文字以绝对定位浮层
+   .rail-pill 从页边浮出覆盖在纸面上——不撑宽 aside、不遮右侧内容卡。
+   图标在原位不动,文字从其右侧淡入。 */
 
 .rail-item {
   position: relative;
@@ -655,16 +655,40 @@ select.input {
   width: 36px;
   border-radius: 18px;
   cursor: pointer;
-  transition-property: width, background-color, color;
-  transition-duration: 200ms;
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-property: color;
+  transition-duration: 120ms;
 }
 
-/* 胶囊态:宽度自适应文字,淡墨底 */
+/* 展开态批注条:绝对定位浮层,盖在纸面上而非撑开装订线 */
 .rail-item-open {
-  width: max-content;
-  background-color: var(--accent-wash);
+  background-color: transparent;
+}
+
+.rail-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 36px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-ink);
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
   padding-right: 14px;
+  z-index: 40;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease 40ms,
+    visibility 180ms ease 40ms;
+}
+
+.rail-item-open .rail-pill {
+  opacity: 1;
+  visibility: visible;
 }
 
 .rail-item:hover {
@@ -675,11 +699,10 @@ select.input {
   color: var(--accent);
 }
 
-/* 文字标签:收起时宽 0 + 透明,胶囊时淡入 + 微位移 */
+/* 文字标签:收起时透明,批注条浮出时淡入 + 微位移 */
 .rail-pill-label {
-  width: 0;
-  min-width: 0;
-  overflow: hidden;
+  margin-left: 40px; /* 让出图标区域,文字从 36px 图标右侧开始 */
+  padding-left: 0;
   opacity: 0;
   transform: translateX(-4px);
   white-space: nowrap;
@@ -687,21 +710,17 @@ select.input {
   line-height: 36px;
   font-weight: 500;
   transition:
-    opacity 180ms ease 40ms,
+    opacity 160ms ease 60ms,
     transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  pointer-events: none;
 }
 
 .rail-item-open .rail-pill-label {
-  width: max-content;
   opacity: 1;
   transform: translateX(0);
-  margin-left: 8px;
 }
 
-/* active 铅笔勾:右缘外一道 4×20 短竖线。文字标签的裁剪由
-   .rail-pill-label 自己的 width:0 + overflow:hidden 负责,
-   父元素不裁剪,铅笔勾用 ::after 挂在外缘即可。 */
+/* active 铅笔勾:收起态右缘外一道 4×20 短竖线;
+   展开态改为批注条左侧一道 3px 短竖勾。 */
 .rail-item.is-active::after {
   content: "";
   position: absolute;
@@ -719,7 +738,12 @@ select.input {
 }
 
 .rail-item.is-active.rail-item-open::after {
-  left: 100%;
+  left: 0;
+  top: 8px;
+  width: 3px;
+  height: 20px;
+  transform: none;
+  border-radius: 1.5px;
 }
 
 /* ---------- dock 文字标签(手机 10.5px) ---------- */
@@ -811,15 +835,30 @@ select.input {
    - 平板 768–1023px(md):装订线恒 56px,当前页长显文字胶囊
    - 桌面 ≥1024px(lg):装订线恒 64px,当前页长显文字胶囊
    内容区 padding:px-4 pt-6 pb-[80px](手机,dock 留位)/ md:px-6 py-8 /
-   lg:px-8 / xl:px-10;page-content 左对齐,max-width 1280 保留。
+   lg:px-10 xl:px-10(桌面左右各 40px 对称);page-content 左对齐自然流,
+   不再 max-width 居中。
    ============================================================ */
 
 /* ---------- 内容区节奏 ---------- */
 
 .page-content {
   width: 100%;
-  max-width: 1280px;
-  /* 左对齐:装订线展开/收起时内容不随宽来回跳 */
+  max-width: none;
+  margin-inline: 0;
+  /* 左对齐自然流:左右 padding 对称(main px-4/6/10),不居中留白 */
+}
+
+/* ---------- 装订线品牌文字 ---------- */
+
+.brand-name {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  white-space: nowrap;
+  margin-top: 2px;
 }
 
 /* ---------- 装订线收起态不再有 tooltip ----------
