@@ -1,6 +1,7 @@
-# 文档加载:PyMuPDF(PDF→Markdown)+ MD 直读(方案 7.1)
+# 文档加载:PyMuPDF(PDF→Markdown)+ Word/MD 直读
 from __future__ import annotations
 
+from docx import Document
 import pymupdf as fitz  # PyMuPDF 新 API
 
 
@@ -28,11 +29,33 @@ def load_markdown_from_pdf(pdf_path: str) -> str:
     return text
 
 
+def load_markdown_from_docx(docx_path: str) -> str:
+    """提取 Word 文档正文和表格文本,转成可检索的纯文本。"""
+    try:
+        document = Document(docx_path)
+    except Exception as exc:
+        raise ParseError("Word 文档无法读取,请确认文件未损坏") from exc
+
+    parts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+
+    text = "\n\n".join(parts).strip()
+    if not text:
+        raise ParseError("Word 文档未提取到文本")
+    return text
+
+
 def load_file(path: str, *, suffix: str | None = None) -> str:
     """统一入口:返回 Markdown 文本。"""
     suffix = (suffix or path.rsplit(".", 1)[-1]).lower()
     if suffix == "pdf":
         return load_markdown_from_pdf(path)
+    if suffix == "docx":
+        return load_markdown_from_docx(path)
     if suffix in {"md", "markdown", "txt"}:
         return open(path, encoding="utf-8", errors="replace").read()
     raise ParseError(f"不支持的文件类型: .{suffix}")
