@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode, type SVGProps } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import type { ReactNode, SVGProps } from 'react'
+import { NavLink, Outlet } from 'react-router-dom'
 import { CloudConfirmDialog } from './CloudConfirmDialog'
 
 /** 统一 1.5 描边线性图标(与整体「锻铁」线条语言一致)。装订线内 24px 视觉尺寸 */
@@ -134,49 +134,25 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-const RAIL_ITEMS = NAV_ITEMS.filter((i) => i.to !== '/settings')
+
+const RAIL_ITEMS = NAV_ITEMS.filter((item) => item.to !== '/settings')
 const SETTINGS_ITEM = NAV_ITEMS[NAV_ITEMS.length - 1]
 
-/**
- * 装订线导航项 —— 单点 morph:
- * 静置恒为 36×36 纯图标(装订线 64/56px 不变);胶囊态(当前页长显,
- * 或点击其它项迁移过去)图标不动、右侧文字从旁边淡入,宽度由文字撑开。
- * 再点已展开项收回到纯图标。hover 只做变色轻反馈。
- */
-function RailItem({
-  item,
-  expanded,
-  onExpand,
-}: {
-  item: NavItem
-  expanded: boolean
-  onExpand: (to: string) => void
-}) {
+function RailItem({ item, tabletOnly = false }: { item: NavItem; tabletOnly?: boolean }) {
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
       aria-label={item.label}
-      className={({ isActive }) =>
-        `rail-item ${expanded ? 'rail-item-open' : ''} ${
-          isActive ? 'is-active text-[color:var(--accent)]' : 'text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]'
-        }`
-      }
-      onClick={() => onExpand(item.to)}
+      className={({ isActive }) => `side-nav-item ${isActive ? 'is-active' : ''}`}
     >
-      {() => (
-        <>
-          <span className="grid h-9 w-9 shrink-0 place-items-center">{item.icon}</span>
-          <span className="rail-pill">
-            <span className="rail-pill-label">{item.label}</span>
-          </span>
-        </>
-      )}
+      <span className="side-nav-icon">{item.icon}</span>
+      <span className="side-nav-label">{item.label}</span>
+      {tabletOnly ? <span className="side-nav-tooltip" aria-hidden="true">{item.label}</span> : null}
     </NavLink>
   )
 }
 
-/** 手机底部 dock 项:20px 图标 + 下方 10.5px 文字标签;active 是上缘 3px 铅笔勾 */
 function DockItem({ item }: { item: NavItem }) {
   return (
     <NavLink
@@ -191,13 +167,9 @@ function DockItem({ item }: { item: NavItem }) {
     >
       {({ isActive }) => (
         <>
-          {isActive && (
-            <span
-              aria-hidden="true"
-              className="absolute top-0 left-1/2 h-[3px] w-4 -translate-x-1/2 rounded-b"
-              style={{ backgroundColor: 'var(--accent)' }}
-            />
-          )}
+          {isActive ? (
+            <span aria-hidden="true" className="absolute top-0 left-1/2 h-[3px] w-4 -translate-x-1/2 rounded-b" style={{ backgroundColor: 'var(--accent)' }} />
+          ) : null}
           <span className="[&>svg]:h-5 [&>svg]:w-5">{item.icon}</span>
           <span className="dock-label max-w-full truncate">{item.label}</span>
         </>
@@ -206,95 +178,36 @@ function DockItem({ item }: { item: NavItem }) {
   )
 }
 
-/**
- * 「一页书」布局:
- * 桌面 ≥md 装订线恒 64px(lg)/ 56px(md),导航项静置 36×36 纯图标;
- * 当前页默认长显图标+文字胶囊;点击其它项胶囊即时迁移(200ms morph),
- * 再点已展开项收回纯图标。整条侧栏不再有 208px 展开档位。
- * 手机 <md 为 52px 底部 dock(上缘 0.5px 墨线),图标 + 10.5px 文字标签。
- */
 export function SideNavLayout() {
-  // 当前长显胶囊的导航项:跟随路由(品牌印 / 程序内跳转也会带动)
-  const [openTo, setOpenTo] = useState('')
-  const { pathname } = useLocation()
-
-  useEffect(() => {
-    setOpenTo(pathname)
-  }, [pathname])
-
-  /** 点已展开项收回;点其它项则胶囊迁移过去 */
-  const handleExpand = (to: string) => {
-    setOpenTo((prev) => (prev === to ? '' : to))
-  }
-
   return (
-    <div
-      className="flex h-full min-h-0"
-      style={{ backgroundColor: 'var(--bg)', color: 'var(--fg)' }}
-    >
-      {/* 装订线:与纸同底、无右边框;宽度恒定,仅单项位置 morph 出文字胶囊 */}
-      <aside
-        className="hidden w-14 shrink-0 flex-col pb-4 pt-5 md:flex lg:w-16"
-        aria-label="主导航"
-      >
-        {/* 品牌区:Mark 图标;「磨刀石」文字在其下方(装订线仅 56/64px,放不下横排) */}
-        <NavLink
-          to="/"
-          aria-label="磨刀石 · 资料库"
-          className="flex flex-col items-center gap-[2px] px-[12px] py-1"
-        >
+    <div className="app-shell flex h-full min-h-0" style={{ backgroundColor: 'var(--bg)', color: 'var(--fg)' }}>
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
+
+      <aside className="side-nav hidden shrink-0 flex-col md:flex" aria-label="主导航">
+        <NavLink to="/" aria-label="磨刀石 · 资料库" className="side-nav-brand">
           <WhetstoneMark size={24} />
-          <span className="brand-name">磨刀石</span>
+          <span className="side-nav-brand-name">磨刀石</span>
         </NavLink>
 
-        <nav className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[12px]" aria-label="主导航链接">
-          {RAIL_ITEMS.map((item) => (
-            <RailItem
-              key={item.to}
-              item={item}
-              expanded={openTo === item.to}
-              onExpand={handleExpand}
-            />
-          ))}
+        <nav className="side-nav-list" aria-label="主导航链接">
+          {RAIL_ITEMS.map((item) => <RailItem key={item.to} item={item} tabletOnly />)}
         </nav>
 
-        {/* 底部设置项:与上面 6 项同模式 */}
-        <div className="mt-4 flex flex-col items-start gap-[7px] px-[12px] pb-1">
-          <RailItem
-            item={SETTINGS_ITEM}
-            expanded={openTo === SETTINGS_ITEM.to}
-            onExpand={handleExpand}
-          />
+        <div className="side-nav-settings">
+          <RailItem item={SETTINGS_ITEM} tabletOnly />
         </div>
       </aside>
 
-      {/* 内容区:装订线右侧直接开始,页头由各页 PageHeader 提供 */}
-      <main
-        className="min-w-0 flex-1 overflow-y-auto px-4 pt-6 pb-[80px] md:px-6 md:py-8 lg:px-10 lg:pb-8 xl:px-10"
-        style={{ backgroundColor: 'var(--bg)' }}
-      >
+      <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto px-4 pt-6 pb-[80px] md:px-6 md:py-8 md:pb-8 lg:px-8 xl:px-10" style={{ backgroundColor: 'var(--bg)' }}>
         <div className="page-content">
-          <div className="page-enter">
-            <Outlet />
-          </div>
+          <div className="page-enter"><Outlet /></div>
         </div>
       </main>
 
-      {/* 手机底部 dock:书页「页脚」延伸;上缘 0.5px 墨线 */}
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-30 flex h-[52px] items-stretch md:hidden"
-        style={{
-          backgroundColor: 'var(--bg)',
-          borderTop: '0.5px solid var(--border-ink, var(--border-strong))',
-        }}
-        aria-label="主导航"
-      >
-        {NAV_ITEMS.map((item) => (
-          <DockItem key={item.to} item={item} />
-        ))}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-[52px] items-stretch md:hidden" style={{ backgroundColor: 'var(--bg)', borderTop: '0.5px solid var(--border-ink, var(--border-strong))' }} aria-label="主导航">
+        {NAV_ITEMS.map((item) => <DockItem key={item.to} item={item} />)}
       </nav>
 
-      {/* local_only → 云端 的 409 知情确认对话框,全局挂载 */}
       <CloudConfirmDialog />
     </div>
   )
