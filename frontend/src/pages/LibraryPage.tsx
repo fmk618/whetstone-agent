@@ -5,6 +5,7 @@ import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 import type {
   DocType,
   DocTypeLoose,
@@ -140,18 +141,14 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
       </div>
 
       <div className="flex flex-wrap items-end gap-3 pb-2">
-        <label className="min-w-[140px]" htmlFor="library-doc-type">
+        <label className="min-w-[140px]">
           <span className="field-label mb-1 block">文档类型</span>
-          <select
-            id="library-doc-type"
-            className="input"
+          <Select
             value={docType}
-            onChange={(e) => setDocType(e.target.value as DocType)}
-          >
-            {DOC_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            onChange={(v) => setDocType(v as DocType)}
+            options={DOC_TYPE_OPTIONS}
+            ariaLabel="文档类型"
+          />
         </label>
       </div>
 

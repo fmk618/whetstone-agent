@@ -235,8 +235,8 @@ export function SideNavLayout() {
         className="hidden w-14 shrink-0 flex-col pb-4 pt-5 md:flex lg:w-16"
         aria-label="主导航"
       >
-        {/* 品牌印:仅 Mark,不参与 morph */}
-        <div className="flex items-center px-[6px]">
+        {/* 品牌印:仅 Mark,不参与 morph;与导航项同左缘(px-[12px])保证垂直基线对齐 */}
+        <div className="flex items-center px-[12px]">
           <NavLink
             to="/"
             aria-label="磨刀石 · 资料库"
@@ -246,7 +246,7 @@ export function SideNavLayout() {
           </NavLink>
         </div>
 
-        <nav className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[10px]" aria-label="主导航链接">
+        <nav className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[12px]" aria-label="主导航链接">
           {RAIL_ITEMS.map((item) => (
             <RailItem
               key={item.to}
@@ -258,7 +258,7 @@ export function SideNavLayout() {
         </nav>
 
         {/* 底部设置项:与上面 6 项同模式 */}
-        <div className="mt-4 flex flex-col items-start gap-[7px] px-[10px] pb-1">
+        <div className="mt-4 flex flex-col items-start gap-[7px] px-[12px] pb-1">
           <RailItem
             item={SETTINGS_ITEM}
             expanded={openTo === SETTINGS_ITEM.to}

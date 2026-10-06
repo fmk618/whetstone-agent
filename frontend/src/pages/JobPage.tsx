@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { WipPlaceholder } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 
 /* -----
  * 占位数据,结构对齐后端方案 7.2:
@@ -107,21 +108,13 @@ function JdEditor() {
         {parsed ? (
           <div className="flex flex-1 flex-col gap-4">
             <div>
-              <label className="field-label mb-1.5" htmlFor="standard-name">
-                标准职业名
-              </label>
-              <select
-                id="standard-name"
-                className="input"
+              <span className="field-label mb-1.5 block">标准职业名</span>
+              <Select
                 value={standard}
-                onChange={(e) => setStandard(e.target.value)}
-              >
-                {MATCH.candidates.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+                onChange={setStandard}
+                options={MATCH.candidates.map((name) => ({ value: name, label: name }))}
+                ariaLabel="标准职业名"
+              />
             </div>
 
             <div className="rounded-lg px-3.5 py-3" style={{ backgroundColor: 'var(--bg-inset)' }}>

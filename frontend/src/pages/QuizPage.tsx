@@ -6,6 +6,7 @@ import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 import type {
   AnswerIn,
   AnswerRecord,
@@ -447,47 +448,42 @@ function GenerateToolbar({
       <h2 className="mb-3 text-base font-semibold">生成题目</h2>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[150px]">
-          <label className="field-label mb-1" htmlFor="quiz-layer">
-            层级(出题范围)
-          </label>
-          <select
-            id="quiz-layer"
-            className="input"
+          <span className="field-label mb-1 block" id="quiz-layer-label">层级(出题范围)</span>
+          <Select
             value={layer}
-            onChange={(e) => setLayer(e.target.value as Layer)}
-          >
-            <option value="core">基础(通用能力)</option>
-            <option value="resume">项目(简历深挖)</option>
-            <option value="domain">领域(知识点)</option>
-          </select>
+            onChange={(v) => setLayer(v as Layer)}
+            options={[
+              { value: 'core', label: '基础(通用能力)' },
+              { value: 'resume', label: '项目(简历深挖)' },
+              { value: 'domain', label: '领域(知识点)' },
+            ]}
+            ariaLabel="层级(出题范围)"
+          />
         </div>
 
         <div className="min-w-[160px]">
-          <label className="field-label mb-1" htmlFor="quiz-pack">
-            行业包
-          </label>
-          <select id="quiz-pack" className="input" value={pack} onChange={(e) => setPack(e.target.value)}>
-            {PACK_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <span className="field-label mb-1 block">行业包</span>
+          <Select
+            value={pack}
+            onChange={setPack}
+            options={PACK_OPTIONS}
+            ariaLabel="行业包"
+          />
         </div>
 
         <div className="min-w-[110px]">
-          <label className="field-label mb-1" htmlFor="quiz-total">
-            题目数量
-          </label>
-          <select
-            id="quiz-total"
-            className="input"
+          <span className="field-label mb-1 block">题目数量</span>
+          <Select
             value={String(total)}
-            onChange={(e) => setTotal(Number(e.target.value))}
-          >
-            <option value="1">1 题</option>
-            <option value="3">3 题</option>
-            <option value="5">5 题</option>
-            <option value="10">10 题</option>
-          </select>
+            onChange={(v) => setTotal(Number(v))}
+            options={[
+              { value: '1', label: '1 题' },
+              { value: '3', label: '3 题' },
+              { value: '5', label: '5 题' },
+              { value: '10', label: '10 题' },
+            ]}
+            ariaLabel="题目数量"
+          />
         </div>
 
         <button
