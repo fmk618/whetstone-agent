@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useQueries, useQuery } from '@tanstack/react-query'
-import { get } from '../api/client'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { get, post } from '../api/client'
+import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { CountUp, Reveal } from '../components/Motion'
 import type { LibraryDoc, ProfileClaim } from '../api/types'
@@ -186,6 +187,36 @@ export default function ProfilePage() {
   })
 
   const docs = useMemo(() => docsQuery.data ?? [], [docsQuery.data])
+  const queryClient = useQueryClient()
+  const profileDocs = docs.filter((doc) => ['resume', 'project', 'notes'].includes(doc.doc_type))
+
+  const extractMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      const send = (opts: { confirmCloud: boolean }) =>
+        post(`/api/docs/${docId}/profile/extract`, {}, {
+          query: { confirm_cloud: opts.confirmCloud },
+        })
+      try {
+        return await send({ confirmCloud: false })
+      } catch (error) {
+        return await requestWithCloudConfirm(send, error)
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['docs'] })
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+    },
+  })
+
+  async function extractProfiles() {
+    try {
+      for (const doc of profileDocs) {
+        await extractMutation.mutateAsync(doc.id)
+      }
+    } catch {
+      // The mutation state renders the actionable error message.
+    }
+  }
 
   // 每份文档对应一次 /profile 请求(数量可控,后端单表索引按 doc_id 命中)
   const profileQueries = useQueries({
@@ -222,11 +253,23 @@ export default function ProfilePage() {
       <PageHeader
         title="知识档案"
         actions={
-          <button className="btn btn-ghost" onClick={() => docsQuery.refetch()} disabled={docsQuery.isFetching || profileQueries.some((q) => q.isFetching)}>
-            {docsQuery.isFetching ? '刷新中…' : '重新提取档案'}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => void extractProfiles()}
+            disabled={docsQuery.isFetching || extractMutation.isPending || profileDocs.length === 0}
+          >
+            {extractMutation.isPending ? '提取中…' : '提取知识档案'}
           </button>
         }
       />
+
+      {extractMutation.isError ? (
+        <div className="upload-message is-error mb-6" role="alert">
+          <strong>提取失败</strong>
+          <span>{extractMutation.error instanceof Error ? extractMutation.error.message : '请稍后重试'}</span>
+        </div>
+      ) : null}
 
       {docsQuery.isLoading ? (
         <section className="card p-5 md:p-6">
@@ -268,7 +311,7 @@ function EmptyStateWithDocs() {
       </svg>
       <h2 className="mt-3 text-base font-semibold">还没有抽取记录</h2>
       <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
-        后端已收到文档,但能力抽取尚未运行。重新上传或点击上方「重新提取档案」可触发再次抽取。
+        文档已经上传。点击上方「提取知识档案」，系统会从简历、项目和笔记中整理能力项，并保留原文出处。
       </p>
     </section>
   )
