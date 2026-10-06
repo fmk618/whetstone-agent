@@ -179,50 +179,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                   end={item.to === '/'}
                   onClick={onNavigate}
                   className={({ isActive }) =>
-                    `nav-link relative flex items-center gap-2.5 rounded-lg px-3.5 py-2 text-sm transition-colors duration-150 ${
-                      isActive ? 'is-active' : ''
-                    }`
+                    `nav-link ${isActive ? 'is-active' : ''}`
                   }
                 >
-                  {({ isActive }) => (
-                    <>
-                      {isActive ? <span className="nav-edge" aria-hidden="true" /> : null}
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </>
-                  )}
+                  {item.icon}
+                  <span>{item.label}</span>
                 </NavLink>
               </li>
             ))}
           </ul>
         </div>
       ))}
-    </>
-  )
-}
-
-/** 侧栏底部:轻盈的隐私声明与版本 */
-function SideFooter() {
-  return (
-    <>
-      <div
-        className="mt-auto hidden px-4 pt-4 md:block"
-        style={{ color: 'var(--fg-subtle)' }}
-      >
-        <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: 'var(--success)' }}>
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
-            <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
-          </svg>
-          本地模式 · 数据不出本机
-        </div>
-        <p className="mt-1 text-[11px] leading-relaxed">
-          文档与作答仅存于本机,任何云端发送都会先经你确认。
-        </p>
-      </div>
-      <div className="hidden px-4 pt-2 text-[10.5px] md:block" style={{ color: 'var(--fg-subtle)' }}>
-        磨刀石 v0.1
-      </div>
     </>
   )
 }
@@ -262,25 +229,18 @@ export function SideNavLayout() {
     <div className="flex min-h-full flex-col md:flex-row" style={{ backgroundColor: 'var(--bg)' }}>
       {/* 桌面/平板侧栏 */}
       <aside
-        className="sticky top-0 hidden h-full max-h-screen shrink-0 flex-col pb-4 pt-6 md:flex md:w-[252px]"
-        style={{ backgroundColor: 'var(--bg-elevated)', borderRight: '1px solid var(--border)' }}
+        className="sticky top-0 hidden h-full max-h-screen shrink-0 flex-col pb-4 pt-6 md:flex md:w-[228px]"
+        style={{ backgroundColor: 'var(--bg)', borderRight: '1px solid var(--border)' }}
         aria-label="主导航"
       >
-        <div className="mb-8 flex items-center gap-2.5 px-5">
+        <div className="nav-brand flex items-center gap-2.5 px-5">
           <WhetstoneMark />
-          <div>
-            <div className="text-[15px] font-semibold leading-tight tracking-wide">磨刀石</div>
-            <div className="mt-0.5 text-[11px] leading-tight" style={{ color: 'var(--fg-subtle)' }}>
-              个人面试与学习智能体
-            </div>
-          </div>
+          <div className="text-[15px] font-semibold leading-tight tracking-wide">磨刀石</div>
         </div>
 
         <nav className="flex-1 overflow-y-auto pb-2" aria-label="主导航链接">
           <NavLinks />
         </nav>
-
-        <SideFooter />
       </aside>
 
       {/* 手机端顶栏:汉堡 + 标题 */}
@@ -322,23 +282,17 @@ export function SideNavLayout() {
             aria-hidden="true"
           />
           <aside
-            className="drawer-panel fixed top-0 left-0 z-50 flex h-full w-[258px] flex-col overflow-y-auto pb-5 pt-5 md:hidden"
-            style={{ backgroundColor: 'var(--bg-elevated)', borderRight: '1px solid var(--border)' }}
+            className="drawer-panel fixed top-0 left-0 z-50 flex h-full w-[240px] flex-col overflow-y-auto pb-5 pt-5 md:hidden"
+            style={{ backgroundColor: 'var(--bg)', borderRight: '1px solid var(--border)' }}
             aria-label="主导航抽屉"
           >
-            <div className="mb-7 flex items-center gap-2.5 px-5">
+            <div className="nav-brand flex items-center gap-2.5 px-5">
               <WhetstoneMark />
-              <div>
-                <div className="text-[15px] font-semibold leading-tight tracking-wide">磨刀石</div>
-                <div className="mt-0.5 text-[11px] leading-tight" style={{ color: 'var(--fg-subtle)' }}>
-                  个人面试与学习智能体
-                </div>
-              </div>
+              <div className="text-[15px] font-semibold leading-tight tracking-wide">磨刀石</div>
             </div>
             <nav className="flex-1 pb-3" aria-label="主导航链接">
               <NavLinks onNavigate={() => setDrawerOpen(false)} />
             </nav>
-            <SideFooter />
           </aside>
         </>
       ) : null}
