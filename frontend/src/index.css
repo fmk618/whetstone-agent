@@ -859,6 +859,15 @@ select.input {
   margin-inline: auto;
 }
 
+.jd-editor-card {
+  min-height: 18rem;
+}
+
+.jd-editor-textarea {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 /* ---------- 手机端抽屉动画(浮层 160/180ms,保留) ---------- */
 
 @keyframes drawer-mask-in {
