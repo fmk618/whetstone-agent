@@ -1,8 +1,8 @@
-import type { ReactNode, SVGProps } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { CloudConfirmDialog } from './CloudConfirmDialog'
 
-/** 统一 1.5 描边线性图标(与整体「锻铁」线条语言一致)。装订线内用 28px 视觉尺寸 */
+/** 统一 1.5 描边线性图标(与整体「锻铁」线条语言一致)。装订线内 24px 视觉尺寸 */
 function Icon({ children, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -56,7 +56,7 @@ interface NavItem {
   icon: ReactNode
 }
 
-/** 装订线 / 底部 dock 共用的七项注记:纯图标,无文字(aria-label 补可访问性) */
+/** 装订线 / 底部 dock 共用的七项注记 */
 const NAV_ITEMS: NavItem[] = [
   {
     to: '/',
@@ -137,22 +137,52 @@ const NAV_ITEMS: NavItem[] = [
 const RAIL_ITEMS = NAV_ITEMS.filter((i) => i.to !== '/settings')
 const SETTINGS_ITEM = NAV_ITEMS[NAV_ITEMS.length - 1]
 
+const NAV_EXPANDED_KEY = 'whetstone.nav-expanded'
+
+function readPinnedExpanded(): boolean {
+  try {
+    return window.localStorage.getItem(NAV_EXPANDED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 收/展切换按钮:chevron 双箭头(朝左收起 / 朝右展开) */
+function ToggleChevrons({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+    >
+      <path d="M14.5 6 9.5 12l5 6" />
+      <path d="M19 6l-5 6 5 6" opacity="0.45" />
+    </svg>
+  )
+}
+
 /**
- * 装订线导航项:36×36 点击热区,28px 图标居中。
- * hover:图标色 --fg-subtle → --fg(120ms);无背景块。
- * active:图标变 --accent + 铅笔勾 3px 短竖线,锐利悬出装订线右缘(像页边批注)。
+ * 装订线导航项。收起态:36×36 热区 + 24px 图标 + 右侧浮出 .rail-tip;
+ * 展开态:图标 + 文字标签,hover inset 淡染,active 图标 accent + 文字加重。
+ * active 铅笔勾:左侧 4×20px 短竖线悬出右缘。
  */
-function RailItem({ item }: { item: NavItem }) {
+function RailItem({ item, expanded }: { item: NavItem; expanded: boolean }) {
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
-      title={item.label}
       aria-label={item.label}
       className={({ isActive }) =>
-        `relative grid h-9 w-9 place-items-center text-[color:var(--fg-subtle)] transition-colors duration-[120ms] hover:text-[color:var(--fg)] ${
-          isActive ? 'is-active text-[color:var(--accent)]' : ''
-        }`
+        `relative flex h-9 w-9 items-center justify-center overflow-visible rounded-[4px] transition-colors duration-[120ms] ${
+          expanded ? 'h-9 w-[172px] justify-start px-[6px] hover:bg-[color:var(--accent-wash)]' : ''
+        } ${isActive ? 'is-active text-[color:var(--accent)]' : 'text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]'}`
       }
     >
       {({ isActive }) => (
@@ -160,28 +190,38 @@ function RailItem({ item }: { item: NavItem }) {
           {isActive && (
             <span
               aria-hidden="true"
-              className="absolute top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-r"
+              className="absolute top-1/2 h-[20px] w-[4px] -translate-y-1/2 rounded-r"
               style={{ left: 'calc(100% + 6px)', backgroundColor: 'var(--accent)' }}
             />
           )}
           {item.icon}
+          <span
+            className={`dock-label ml-[10px] whitespace-nowrap text-[color:var(--fg)] transition-opacity duration-[180ms] ${
+              expanded
+                ? 'opacity-100 font-semibold'
+                : 'pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0'
+            }`}
+            style={expanded ? { fontWeight: isActive ? 600 : 500 } : undefined}
+          >
+            {item.label}
+          </span>
+          {!expanded && <span className="rail-tip">{item.label}</span>}
         </>
       )}
     </NavLink>
   )
 }
 
-/** 手机底部 dock 项:同装订线语言,36px 热区,active 是顶端下垂 3px 铅笔勾 */
+/** 手机底部 dock 项:20px 图标 + 下方 10.5px 文字标签;active 是上缘 3px 铅笔勾 */
 function DockItem({ item }: { item: NavItem }) {
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
-      title={item.label}
       aria-label={item.label}
       className={({ isActive }) =>
-        `relative grid h-9 w-9 place-items-center text-[color:var(--fg-subtle)] transition-colors duration-[120ms] active:text-[color:var(--fg)] ${
-          isActive ? 'is-active text-[color:var(--accent)]' : ''
+        `relative flex min-w-0 flex-1 flex-col items-center justify-center gap-[2px] pt-[2px] transition-colors duration-[120ms] active:text-[color:var(--fg)] ${
+          isActive ? 'is-active text-[color:var(--accent)]' : 'text-[color:var(--fg-subtle)]'
         }`
       }
     >
@@ -190,11 +230,12 @@ function DockItem({ item }: { item: NavItem }) {
           {isActive && (
             <span
               aria-hidden="true"
-              className="absolute -top-[1px] left-1/2 h-[3px] w-4 -translate-x-1/2 rounded-b"
+              className="absolute top-0 left-1/2 h-[3px] w-4 -translate-x-1/2 rounded-b"
               style={{ backgroundColor: 'var(--accent)' }}
             />
           )}
-          {item.icon}
+          <span className="[&>svg]:h-5 [&>svg]:w-5">{item.icon}</span>
+          <span className="dock-label max-w-full truncate">{item.label}</span>
         </>
       )}
     </NavLink>
@@ -202,42 +243,123 @@ function DockItem({ item }: { item: NavItem }) {
 }
 
 /**
- * 「一页书」布局:桌面 ≥lg 装订线 56px(平板 md 48px),同纸底、无分隔线、无背景块;
- * 手机 <768 为 52px 底部 dock(上缘 0.5px 墨线)。无抽屉、无遮罩、无顶栏,页头交给各页 PageHeader。
+ * 「一页书」布局:
+ * 桌面 ≥md 可展开装订线 —— 收起 64px(lg)/ 56px(md),hover(150ms 去抖)或点击
+ * 切换按钮展开为 208px 文字导航;pinned 存 localStorage('whetstone.nav-expanded')。
+ * 手机 <md 为 52px 底部 dock(上缘 0.5px 墨线),图标 + 10.5px 文字标签。
  */
 export function SideNavLayout() {
+  const [pinned, setPinned] = useState<boolean>(() => readPinnedExpanded())
+  const [hovering, setHovering] = useState(false)
+  const hoverTimer = useRef<number | null>(null)
+
+  // pinned 变化落盘(try/catch,隐私模式兜底)
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NAV_EXPANDED_KEY, pinned ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [pinned])
+
+  useEffect(
+    () => () => {
+      if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
+    },
+    [],
+  )
+
+  const expanded = pinned || hovering
+
+  const onEnter = () => {
+    if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
+    hoverTimer.current = window.setTimeout(() => setHovering(true), 150)
+  }
+  const onLeave = () => {
+    if (hoverTimer.current !== null) {
+      window.clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
+    }
+    setHovering(false)
+  }
+
   return (
     <div
       className="flex h-full min-h-0"
       style={{ backgroundColor: 'var(--bg)', color: 'var(--fg)' }}
     >
-      {/* 装订线:与纸同底,无右边框,靠留白自身断开 */}
+      {/* 装订线:与纸同底,无右边框;收起仅图标,hover/pinned 展开为文字导航 */}
       <aside
-        className="hidden shrink-0 flex-col items-center pb-5 pt-5 md:flex md:w-12 lg:w-14"
+        onMouseEnter={onEnter}
+        onMouseLeave={onLeave}
+        className="hidden shrink-0 flex-col pb-4 pt-5 md:flex"
+        style={{
+          width: expanded ? 208 : undefined,
+          transition: 'width 200ms ease',
+        }}
         aria-label="主导航"
+        aria-expanded={expanded}
       >
-        {/* 品牌印:仅 Mark,链到资料库 */}
-        <NavLink
-          to="/"
-          aria-label="磨刀石 · 资料库"
-          title="磨刀石"
-          className="mb-6 grid h-8 w-8 place-items-center"
+        {/* 收起档位宽度:md 56px / lg 64px */}
+        <div
+          className={expanded ? 'w-[208px]' : 'w-14 md:w-14 lg:w-16'}
+          style={{ width: expanded ? 208 : undefined }}
         >
-          <WhetstoneMark size={24} />
-        </NavLink>
+          <div className="flex min-w-0 flex-col" style={{ width: '100%' }}>
+            {/* 品牌印:收起仅 Mark;展开 Mark + 「磨刀石」 */}
+            <div className="flex items-center px-[6px]">
+              <NavLink
+                to="/"
+                aria-label="磨刀石 · 资料库"
+                className="grid h-9 w-9 shrink-0 place-items-center"
+              >
+                <WhetstoneMark size={24} />
+              </NavLink>
+              <span
+                className={`serif-title ml-[6px] whitespace-nowrap text-[14px] transition-opacity duration-[180ms] ${
+                  expanded ? 'opacity-100' : 'pointer-events-none opacity-0'
+                }`}
+              >
+                磨刀石
+              </span>
+            </div>
 
-        <nav className="flex flex-1 flex-col items-center gap-[11px]" aria-label="主导航链接">
-          {RAIL_ITEMS.map((item) => (
-            <RailItem key={item.to} item={item} />
-          ))}
-        </nav>
+            <nav
+              className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[10px]"
+              aria-label="主导航链接"
+            >
+              {RAIL_ITEMS.map((item) => (
+                <RailItem key={item.to} item={item} expanded={expanded} />
+              ))}
+            </nav>
 
-        <RailItem item={SETTINGS_ITEM} />
+            {/* 底部:设置 + 收/展切换 */}
+            <div className="mt-4 flex flex-col items-start gap-[7px] px-[10px] pb-1">
+              <RailItem item={SETTINGS_ITEM} expanded={expanded} />
+              <button
+                type="button"
+                onClick={() => setPinned((p) => !p)}
+                aria-label={expanded ? '收起导航' : '展开导航'}
+                className="flex h-9 items-center justify-start rounded-[4px] px-[7px] text-[color:var(--fg-subtle)] transition-colors duration-[120ms] hover:text-[color:var(--fg)]"
+                style={{ width: '100%' }}
+              >
+                <ToggleChevrons collapsed={!expanded} />
+                <span
+                  className={`dock-label ml-[12px] whitespace-nowrap transition-opacity duration-[180ms] ${
+                    expanded ? 'opacity-100' : 'pointer-events-none opacity-0'
+                  }`}
+                >
+                  收起导航
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      {/* 内容区:装订线右侧直接开始,页头由各页 PageHeader 提供(批次 1) */}
+      {/* 内容区:装订线右侧直接开始,页头由各页 PageHeader 提供 */}
       <main
-        className="min-w-0 flex-1 overflow-y-auto px-4 pt-8 pb-24 md:px-6 md:py-8 lg:px-12 lg:pb-8 xl:px-16"
+        className="min-w-0 flex-1 overflow-y-auto px-4 pt-6 pb-[80px] md:px-6 md:py-8 md:pb-8 lg:px-8 lg:pb-8 xl:px-10"
         style={{ backgroundColor: 'var(--bg)' }}
       >
         <div className="page-content">
@@ -247,9 +369,9 @@ export function SideNavLayout() {
         </div>
       </main>
 
-      {/* 手机底部 dock:书页「页脚」延伸;z-index 高于内容,低于浮层 */}
+      {/* 手机底部 dock:书页「页脚」延伸;上缘 0.5px 墨线 */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-30 flex h-[52px] items-stretch justify-around md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-30 flex h-[52px] items-stretch md:hidden"
         style={{
           backgroundColor: 'var(--bg)',
           borderTop: '0.5px solid var(--border-ink, var(--border-strong))',
