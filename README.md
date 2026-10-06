@@ -38,25 +38,7 @@ Whetstone 通过本地文档库、混合检索、可配置的 LLM 角色路由�
 
 典型的资料到练习流程如下：
 
-```mermaid
-flowchart LR
-    User[用户] --> Frontend[React 前端]
-    Frontend -->|Vite 代理 /api| API[FastAPI API]
-
-    API --> Ingest[资料处理<br/>解析 · 敏感检测 · 切块 · 嵌入]
-    Ingest --> SQLite[(SQLite<br/>文档与练习记录)]
-    Ingest --> Chroma[(ChromaDB<br/>personal / reference)]
-
-    API --> Quiz[会话 · 出题 · 作答 · 评分 · 复习]
-    Quiz --> Retrieval[混合检索<br/>向量 + BM25]
-    Retrieval --> Chroma
-    Quiz --> Agents[Generator / Evaluator]
-    Agents --> Router[LLM Router<br/>角色路由 + 隐私闸门]
-    Ingest --> Router
-
-    Router --> Cloud[云端 OpenAI 兼容服务]
-    Router --> Local[本地 Ollama / LM Studio]
-```
+![系统流程图](docs/architecture.svg)
 
 一次出题请求大致经过以下步骤：
 
@@ -199,6 +181,7 @@ whetstone-agent/
 │   ├── vite.config.ts            # Vite 开发服务器与 /api 代理
 │   └── package.json              # 前端脚本与依赖
 ├── docs/
+│   ├── architecture.svg         # README 使用的静态架构流程图
 │   └── architecture-diagram.html # 独立浏览器版架构图
 ├── data/                         # 运行时数据，已被 gitignore 排除
 └── LICENSE                       # Apache License 2.0

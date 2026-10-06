@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 960 560" width="960" height="560" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Whetstone（磨刀石）架构流程图</title>
+  <desc id="desc">展示前端、FastAPI、LLM Router、本地存储和 LLM 服务商之间的数据流。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#8a7a63"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="560" fill="#f6f0e3"/>
+  <text x="480" y="42" text-anchor="middle" font-family="system-ui, PingFang SC, Microsoft YaHei, sans-serif" font-size="20" font-weight="700" fill="#3b3327">Whetstone（磨刀石）架构</text>
+
+  <g font-family="system-ui, PingFang SC, Microsoft YaHei, sans-serif">
+    <rect x="60" y="80" width="220" height="120" rx="10" fill="#fbf7ec" stroke="#d8ccb4"/>
+    <text x="170" y="108" text-anchor="middle" font-size="15" font-weight="600" fill="#3b3327">前端</text>
+    <text x="170" y="130" text-anchor="middle" font-size="12" fill="#6b5f4d">React 18 + Vite + TypeScript</text>
+    <text x="170" y="150" text-anchor="middle" font-size="12" fill="#6b5f4d">资料库 / 出题 / 面试</text>
+    <text x="170" y="170" text-anchor="middle" font-size="12" fill="#6b5f4d">复习 / 设置</text>
+
+    <rect x="380" y="70" width="240" height="150" rx="10" fill="#fbf7ec" stroke="#a3622a" stroke-width="1.5"/>
+    <text x="500" y="96" text-anchor="middle" font-size="15" font-weight="600" fill="#3b3327">后端 FastAPI</text>
+    <rect x="400" y="110" width="200" height="26" rx="6" fill="#f3e7d6"/>
+    <text x="500" y="127" text-anchor="middle" font-size="12" fill="#5a4a35">REST API（资料 / 练习 / 设置）</text>
+    <rect x="400" y="144" width="200" height="26" rx="6" fill="#f3e7d6"/>
+    <text x="500" y="161" text-anchor="middle" font-size="12" fill="#5a4a35">解析 / 敏感检测 / 切块</text>
+    <rect x="400" y="178" width="200" height="26" rx="6" fill="#f3e7d6"/>
+    <text x="500" y="195" text-anchor="middle" font-size="12" fill="#5a4a35">混合检索：向量 + BM25</text>
+
+    <rect x="700" y="80" width="200" height="110" rx="10" fill="#a3622a" opacity="0.12"/>
+    <rect x="700" y="80" width="200" height="110" rx="10" fill="none" stroke="#a3622a" stroke-width="1.5"/>
+    <text x="800" y="106" text-anchor="middle" font-size="14" font-weight="700" fill="#a3622a">LLM Router</text>
+    <text x="800" y="128" text-anchor="middle" font-size="12" fill="#5a4a35">角色路由 + 隐私闸门</text>
+    <text x="800" y="148" text-anchor="middle" font-size="11" fill="#6b5f4d">敏感内容需确认</text>
+    <text x="800" y="168" text-anchor="middle" font-size="11" fill="#6b5f4d">按角色选择模型</text>
+
+    <rect x="380" y="290" width="240" height="130" rx="10" fill="#fbf7ec" stroke="#d8ccb4"/>
+    <text x="500" y="316" text-anchor="middle" font-size="15" font-weight="600" fill="#3b3327">本地存储 data/</text>
+    <text x="500" y="342" text-anchor="middle" font-size="12" fill="#6b5f4d">SQLite：练习记录与复习队列</text>
+    <text x="500" y="362" text-anchor="middle" font-size="12" fill="#6b5f4d">ChromaDB：个人资料与参考资料</text>
+    <text x="500" y="382" text-anchor="middle" font-size="12" fill="#6b5f4d">原始文件：不提交到 Git</text>
+
+    <rect x="700" y="290" width="200" height="130" rx="10" fill="#fbf7ec" stroke="#d8ccb4"/>
+    <text x="800" y="316" text-anchor="middle" font-size="15" font-weight="600" fill="#3b3327">模型服务</text>
+    <text x="800" y="342" text-anchor="middle" font-size="12" fill="#6b5f4d">云端：千问 / 豆包 / Kimi</text>
+    <text x="800" y="362" text-anchor="middle" font-size="12" fill="#6b5f4d">DeepSeek 等兼容服务</text>
+    <text x="800" y="382" text-anchor="middle" font-size="12" fill="#6b5f4d">本地：Ollama / LM Studio</text>
+  </g>
+
+  <g fill="none" stroke="#8a7a63" stroke-width="1.5" marker-end="url(#arrow)">
+    <path d="M280,140 L376,140"/>
+    <path d="M620,140 L696,140"/>
+    <path d="M500,220 L500,286"/>
+    <path d="M800,190 L800,286"/>
+  </g>
+  <g font-family="system-ui, PingFang SC, Microsoft YaHei, sans-serif" font-size="11" fill="#8a7a63">
+    <text x="328" y="132" text-anchor="middle">资料与操作请求</text>
+    <text x="480" y="470" text-anchor="middle">五类角色可分别绑定不同模型：抽取、出题、评分、面试、嵌入</text>
+    <text x="480" y="492" text-anchor="middle">敏感资料默认仅本机处理，发送云端前需要用户确认</text>
+  </g>
+</svg>
