@@ -2,19 +2,36 @@ import type { ReactNode } from 'react'
 
 export interface PageHeaderProps {
   title: string
-  description: string
+  description?: string
   actions?: ReactNode
 }
 
-/** 页面统一页头:大标题 + 一句副标题 + 右侧主操作区 */
+/**
+ * 墨水页眉:宋体标题 + 下贴墨线(--border-ink),章节线以下直接是内容。
+ * 副标题句默认不显(方案 A 删掉"描述句夹层");若调用方传入 description,
+ * 以稍强的字重作为引导句渲染在标题上、墨线前。
+ */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <header className="mb-7 flex flex-wrap items-start justify-between gap-x-6 gap-y-3 md:mb-8">
+    <header
+      className="ink-rule mb-6 flex flex-wrap items-start justify-between gap-x-6 gap-y-3 pb-3"
+    >
       <div className="min-w-0">
-        <h1 className="text-[22px] font-semibold leading-tight tracking-wide">{title}</h1>
-        <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
-          {description}
-        </p>
+        <h1
+          className="text-[20px] leading-tight"
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontWeight: 600,
+            letterSpacing: '0.01em',
+          }}
+        >
+          {title}
+        </h1>
+        {description ? (
+          <p className="mt-1.5 text-[13px] font-medium" style={{ color: 'var(--fg-muted)' }}>
+            {description}
+          </p>
+        ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2 pt-1">{actions}</div> : null}
     </header>

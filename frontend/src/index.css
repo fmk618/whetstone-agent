@@ -1,76 +1,83 @@
 @import "tailwindcss";
 
 /* ============================================================
-   磨刀石 · 设计 token
-   方向:「书页与批注」—— 温暖的纸张底色,墨棕文字,
-   像摊开一本做了批注的书。以浅色为主基调,
-   让人一打开就想坐下来读书学习;暗色仅跟随系统。
-   中文优先系统字体栈;数字 / 代码 / 引用用 mono 点缀。
+   磨刀石 · 设计 token  —— 方案 A「一页书」
+   整个应用是一张摊开的纸:同一族三种"纸"亮度分层,
+   不靠边线;--border-ink 只给真实结构线(页眉下、表头下)。
+   Radius 两档:2px(印刷锐件) / 12px(浮层)。
+   阴影哲学:内容层零阴影;浮层小偏置双层投影。
    ============================================================ */
 
 :root {
   color-scheme: light;
 
-  /* 书页纸面 */
-  --bg: #f6f0e3;
-  --bg-inset: #ede4d2;
-  --bg-elevated: #fbf7ec;
+  /* 书页纸面(同一族三个亮度) */
+  --bg: #f4efe4;
+  --bg-elevated: #f9f5ea;
+  --bg-inset: #e7dfcd;
 
   /* 墨色前景 */
-  --fg: #3b3327;
-  --fg-muted: #7b6f5b;
-  --fg-subtle: #9a8d76;
+  --fg: #2c2620;
+  --fg-muted: #6b6153;
+  --fg-subtle: #857a68;
 
-  /* 纸边与装订线 */
-  --border: #e0d5bf;
-  --border-strong: #c9bb9f;
+  /* 分隔:普通虚线/空隙用 --border;结构墨线才用 --border-ink */
+  --border: #d8ccb4;
+  --border-ink: #9c8f76;
 
-  /* 批注暖褐(书页上的铅笔与墨勾) */
-  --accent: #a3622a;
-  --accent-strong: #8a5220;
-  --accent-fg: #fdf8ee;
-  --accent-soft: rgba(163, 98, 42, 0.09);
+  /* 批注墨褐(与"墨"同族,不是网页暖橙) */
+  --accent: #7a4a1e;
+  --accent-strong: #5d3813;
+  --accent-fg: #f7f1e2;
+  --accent-wash: rgba(122, 74, 30, 0.08);
+  --accent-soft: var(--accent-wash); /* 兼容旧引用 */
 
-  /* 语义色(书内批注的内涵色) */
-  --success: #3a7a52;
-  --success-soft: rgba(58, 122, 82, 0.1);
-  --warning: #96700f;
-  --warning-soft: rgba(150, 112, 15, 0.12);
-  --danger: #b04a35;
-  --danger-soft: rgba(176, 74, 53, 0.1);
+  /* 语义色(仅徽章与状态) */
+  --success: #2f6b47;
+  --success-soft: rgba(47, 107, 71, 0.1);
+  --warning: #8a6410;
+  --warning-soft: rgba(138, 100, 16, 0.12);
+  --danger: #9c3f2c;
+  --danger-soft: rgba(156, 63, 44, 0.1);
 
-  /* 阴影:克制,只给浮层 */
-  --shadow-pop: 0 16px 40px rgba(72, 58, 33, 0.14);
+  /* 阴影:只给浮层,小偏置双层投影 */
+  --shadow-pop:
+    0 2px 6px rgba(44, 38, 32, 0.1),
+    0 10px 28px rgba(44, 38, 32, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --bg: #1a1712;
-    --bg-inset: #14110d;
-    --bg-elevated: #221e17;
+    /* 夜读:砚台墨 */
+    --bg: #161310;
+    --bg-elevated: #1e1a15;
+    --bg-inset: #241f17;
 
-    --fg: #ece4d2;
-    --fg-muted: #a89c83;
-    --fg-subtle: #7b6f5a;
+    --fg: #e9e0cd;
+    --fg-muted: #a99e87;
+    --fg-subtle: #7d7360;
 
-    --border: #332d22;
-    --border-strong: #473e2e;
+    --border: #312a1f;
+    --border-ink: #4a4232;
 
-    --accent: #dd9552;
-    --accent-strong: #e8a968;
-    --accent-fg: #22150a;
-    --accent-soft: rgba(221, 149, 82, 0.13);
+    --accent: #c08552;
+    --accent-strong: #d69a63;
+    --accent-fg: #181310;
+    --accent-wash: rgba(192, 133, 82, 0.12);
 
     --success: #86c296;
-    --success-soft: rgba(134, 194, 150, 0.13);
+    --success-soft: rgba(134, 194, 150, 0.12);
     --warning: #d9b45c;
-    --warning-soft: rgba(217, 180, 92, 0.13);
+    --warning-soft: rgba(217, 180, 92, 0.12);
     --danger: #e07a66;
-    --danger-soft: rgba(224, 122, 102, 0.13);
+    --danger-soft: rgba(224, 122, 102, 0.12);
 
-    --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.5);
+    /* 暗色浮层:更淡的投影,靠 inset 描边补一轻高光 */
+    --shadow-pop:
+      0 2px 6px rgba(0, 0, 0, 0.4),
+      0 10px 28px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -83,11 +90,12 @@
   --color-fg-muted: var(--fg-muted);
   --color-fg-subtle: var(--fg-subtle);
   --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
+  --color-border-strong: var(--border-ink);
+  --color-border-ink: var(--border-ink);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-fg: var(--accent-fg);
-  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft: var(--accent-wash);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
@@ -98,6 +106,10 @@
   --font-sans:
     system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  /* 标题宋体:本机已装「华文中宋/宋体」,依次回退到思源宋体命名 */
+  --font-serif:
+    "Source Han Serif SC", "Noto Serif SC", "华文中宋", "STZhongsong",
+    "SimSun", serif;
 }
 
 html,
@@ -119,26 +131,26 @@ body {
 }
 
 ::selection {
-  background-color: rgba(163, 98, 42, 0.22);
+  background-color: rgba(122, 74, 30, 0.22);
 }
 
 @media (prefers-color-scheme: dark) {
   ::selection {
-    background-color: rgba(221, 149, 82, 0.32);
+    background-color: rgba(192, 133, 82, 0.32);
   }
 }
 
 /* 细窄滚动条,融入底色 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: var(--border-ink) transparent;
 }
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-strong);
+  background-color: var(--border-ink);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -165,7 +177,28 @@ body {
   }
 }
 
-/* ---------- 通用小部件(手写组件类,避免重复样板) ---------- */
+/* ---------- 排版节奏 ---------- */
+
+/* 章节标题(卡片/区块内小标题):宋体加粗,是"本书"的核心气质 */
+.serif-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+/* 题干/参考资料阅读行:行高放宽 */
+.reading {
+  line-height: 1.8;
+}
+
+/* 等宽数字对齐(表格中的块数、ID 等) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 按钮(说明书档位,全部 2px 近直角) ---------- */
 
 .btn,
 .btn-primary,
@@ -174,7 +207,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border-radius: 7px;
+  border-radius: 2px;
   padding: 6px 14px;
   font-size: 13.5px;
   font-weight: 500;
@@ -205,9 +238,9 @@ body {
   padding: 3px 9px;
   font-size: 12px;
   line-height: 18px;
-  border-radius: 6px;
 }
 
+/* 主按钮:墨褐实底白字,像印刷品上的说明书按钮 */
 .btn-primary {
   background-color: var(--accent);
   color: var(--accent-fg);
@@ -218,33 +251,64 @@ body {
   background-color: var(--accent-strong);
 }
 
+/* 次按钮:1px 墨线描边、墨字(不再用浅 border) */
 .btn-ghost {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-ink);
   background-color: transparent;
   color: var(--fg);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background-color: var(--bg-inset);
-  border-color: var(--border-strong);
+  background-color: var(--accent-wash);
+  border-color: var(--border-ink);
+  color: var(--fg);
 }
 
+/* ghost 第三档:无边框,仅 hover 淡墨染(负向/弱操作) */
+.btn-ghost-plain {
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--fg-muted);
+}
+
+.btn-ghost-plain:hover:not(:disabled) {
+  background-color: var(--accent-wash);
+  color: var(--fg);
+}
+
+/* ---------- 卡片:内容层,零阴影 ---------- */
+
 .card {
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid var(--border);
   background-color: var(--bg-elevated);
   padding: 20px;
 }
 
+/* hover:纸不漂——删 translateY/阴影,改 1px 纸角加深 */
+.card-raised {
+  transition: box-shadow 160ms ease-out;
+}
+
+.card-raised:hover {
+  box-shadow: inset 0 0 0 1px var(--border-ink);
+}
+
 @media (prefers-color-scheme: dark) {
-  /* 暗色下用一道极淡的顶部高光模拟金属受光,代替通用投影 */
   .card {
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+  .card-raised:hover {
+    box-shadow:
+      inset 0 0 0 1px var(--border-ink),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 }
 
+/* ---------- 输入件 ---------- */
+
 .input {
-  border-radius: 7px;
+  border-radius: 2px;
   border: 1px solid var(--border);
   background-color: var(--bg);
   color: var(--fg);
@@ -259,29 +323,29 @@ body {
 }
 
 .input:hover {
-  border-color: var(--border-strong);
+  border-color: var(--border-ink);
 }
 
 .input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 /* 表单字段上方的小标签 */
 .field-label {
   display: block;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
 }
 
-/* ---------- 徽章 ---------- */
+/* ---------- 徽章:只给真正的语义强调 ---------- */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border-radius: 5px;
+  border-radius: 2px;
   padding: 1.5px 7px;
   font-size: 11px;
   font-weight: 500;
@@ -302,9 +366,13 @@ body {
   border-color: var(--border);
 }
 
+/* 兼容位:装饰性 accent 徽章降级为普通灰字(分类文本不加底色,
+   各页面在批次 3 逐一改为普通灰字后移除此类) */
 .badge-accent {
-  background-color: var(--accent-soft);
-  color: var(--accent);
+  background-color: transparent;
+  color: var(--fg-muted);
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .badge-success {
@@ -322,15 +390,15 @@ body {
   color: var(--danger);
 }
 
-/* ---------- 上传拖放框 ---------- */
+/* ---------- 上传拖放框(浮层级允许 12px) ---------- */
 
 .dropzone {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 10px;
+  border: 1.5px dashed var(--border-ink);
+  border-radius: 12px;
   padding: 28px 16px;
   text-align: center;
   cursor: pointer;
@@ -342,14 +410,14 @@ body {
 .dropzone:hover,
 .dropzone:focus-visible {
   border-color: var(--accent);
-  background-color: var(--accent-soft);
+  background-color: var(--accent-wash);
   outline: none;
 }
 
 /* ---------- 可折叠说明条(隐私提示等) ---------- */
 
 .privacy-note {
-  border-radius: 10px;
+  border-radius: 2px;
   border: 1px solid var(--border);
   background-color: var(--bg-elevated);
 }
@@ -363,15 +431,10 @@ body {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  border-radius: 10px;
 }
 
 .privacy-note summary::-webkit-details-marker {
   display: none;
-}
-
-.privacy-note[open] summary {
-  border-radius: 10px 10px 0 0;
 }
 
 .privacy-note summary:hover {
@@ -395,12 +458,11 @@ body {
   transform: rotate(90deg);
 }
 
-/* ---------- 参考答案折叠 ---------- */
+/* ---------- 参考答案折叠(引用块,行高 1.8) ---------- */
 
 .answer-fold {
   margin-top: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 2px;
   background-color: var(--bg-inset);
 }
 
@@ -414,15 +476,10 @@ body {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--fg-muted);
-  border-radius: 8px;
 }
 
 .answer-fold summary::-webkit-details-marker {
   display: none;
-}
-
-.answer-fold[open] summary {
-  border-radius: 8px 8px 0 0;
 }
 
 .answer-fold summary:hover {
@@ -437,54 +494,120 @@ body {
   color: var(--fg);
 }
 
-/* ---------- 侧边导航 ---------- */
+/* ---------- 墨水页眉结构线 ---------- */
 
+/* 页眉下的墨线:这才是 --border-ink 的主场 */
+.ink-rule {
+  border-bottom: 0.5px solid var(--border-ink);
+}
+
+/* 表头下墨线(开放表格,方案 A) */
+.table-ink-head {
+  border-bottom: 1px solid var(--border-ink);
+}
+
+/* ---------- 导航:装订线 rail(纯图标模式,批次 2 接线) ---------- */
+
+/* 纯图标导航项:28px 方形热区,icon 18px 居中 */
+.nav-rail-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--fg-muted);
+  transition: color 160ms ease;
+}
+
+.nav-rail-link svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.nav-rail-link:hover {
+  color: var(--fg);
+}
+
+.nav-rail-link.is-active {
+  color: var(--accent);
+}
+
+/* active 铅笔勾:左侧一道 3px 短竖线,像书页折角的铅笔批注 */
+.nav-rail-link.is-active::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 1px;
+  background-color: var(--accent);
+}
+
+/* 文字模式(手机抽屉/移动 dock 兼容 .nav-link):去药丸,
+   hover 只变墨色,active 用铅笔勾 + 图标变 accent */
 .nav-link {
   position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 10px;
-  padding: 7px 10px 7px 12px;
-  border-radius: 7px;
+  padding: 7px 10px;
   font-size: 13.5px;
   line-height: 20px;
   color: var(--fg-muted);
-  transition:
-    background-color 180ms ease,
-    color 180ms ease;
+  transition: color 160ms ease;
 }
 
 .nav-link svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
-  transition: color 180ms ease;
 }
 
-/* hover:极轻的 tint,不整块变深 */
 .nav-link:hover {
-  background-color: var(--accent-soft);
   color: var(--fg);
 }
 
-/* 激活态:小面积实底 token(渐显,无跳变) + accent 深字 */
 .nav-link.is-active {
-  background-color: var(--accent-soft);
   color: var(--accent);
   font-weight: 500;
 }
 
-.nav-link.is-active svg {
-  color: var(--accent);
+/* 移动端文字项的铅笔勾:底部 2px 墨短线(dock 文字模式可用) */
+.nav-link.is-active::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--accent);
 }
 
-/* 等宽数字对齐(表格中的块数、ID 等) */
-.tnum {
-  font-variant-numeric: tabular-nums;
+/* 品牌印兼容:保留类与节奏(批次 2 重排 rail) */
+.nav-brand {
+  margin-bottom: 22px;
 }
 
-/* 纯 CSS tooltip:hover 显示 data-tooltip 内容 */
+/* 分组小标兼容位:方案 A 无 letterspaced 小标;未改页面引用时
+   只以静音灰字存在,批次 2 拆布局后移除 */
+.nav-group-title {
+  margin: 20px 12px 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fg-subtle);
+}
+
+.nav-group-title:first-child {
+  margin-top: 0;
+}
+
+/* ---------- tooltip(浮层) ---------- */
+
 .tooltip-host {
   position: relative;
 }
@@ -496,7 +619,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
-  border-radius: 6px;
+  border-radius: 2px;
   padding: 4px 8px;
   font-size: 12px;
   pointer-events: none;
@@ -513,15 +636,14 @@ body {
 }
 
 /* ============================================================
-   动效:克制、有用途;整体尊重 prefers-reduced-motion
-   (上方的全局规则已把 transition/animation 压到 0.01ms)
+   动效:只保留 3 种 —— 页面淡入 / 浮层出现 / bar-grow
    ============================================================ */
 
-/* 路由级进场:淡入 + 轻微上移 */
+/* 路由级进场:140ms 淡入 + 4px 上移(整页一次,更轻) */
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -533,46 +655,13 @@ body {
   animation: page-enter 140ms ease-out both;
 }
 
-/* 列表项 stagger:每项延迟 --i * 35ms,只对首屏前 10 项 */
-@keyframes reveal-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+/* 列表 stagger(.reveal)已废除:方案 A 删列表逐项淡入。
+   保留一个空壳规则,未改页面引用时不产生动画,批次 2/3 清引用 */
 .reveal {
-  animation: reveal-in 140ms ease-out both;
-  animation-delay: calc(var(--i, 0) * 35ms);
+  animation: none;
 }
 
-/* 卡片 hover:轻微上浮 + 阴影加深(呼吸感的一部分,非花哨) */
-.card-raised {
-  transition:
-    transform 160ms ease-out,
-    box-shadow 160ms ease-out;
-}
-
-.card-raised:hover {
-  transform: translateY(-1.5px);
-  box-shadow:
-    0 6px 18px rgba(72, 58, 33, 0.08),
-    0 1px 3px rgba(72, 58, 33, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  .card-raised:hover {
-    box-shadow:
-      0 6px 18px rgba(0, 0, 0, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.035);
-  }
-}
-
-/* 进度条/正确率条:加载时从 0 生长到目标宽度 */
+/* 进度条/正确率条:加载时从 0 生长到目标宽度(数据进入值得说明) */
 @keyframes bar-grow {
   from {
     width: 0;
@@ -583,9 +672,7 @@ body {
   animation: bar-grow 160ms ease-out;
 }
 
-/* 激活态/图标颜色统一 180ms */
-
-/* 徽章/按钮颜色统一 120ms */
+/* 徽章/按钮统一 120ms */
 .badge,
 .btn,
 .btn-primary,
@@ -594,37 +681,16 @@ body {
   transition-duration: 120ms;
 }
 
-/* ---------- 侧栏分组 ---------- */
+/* ---------- 内容区节奏 ---------- */
 
-/* 导航区垂直节奏 */
-.nav-brand {
-  margin-bottom: 22px;
-}
-
-.nav-group-title {
-  margin: 20px 22px 6px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--fg-subtle);
-}
-
-.nav-group-title:first-child {
-  margin-top: 0;
-}
-
-.nav-group-title + ul {
-  margin-bottom: 20px;
-}
-
-/* 内容区统一最大宽度(别铺满 2560 宽屏) */
 .page-content {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1280px;
   margin-inline: auto;
 }
 
-/* 手机端抽屉动画(遮罩淡入 + 侧栏滑入) */
+/* ---------- 手机端抽屉动画(浮层 160/180ms,保留) ---------- */
+
 @keyframes drawer-mask-in {
   from {
     opacity: 0;

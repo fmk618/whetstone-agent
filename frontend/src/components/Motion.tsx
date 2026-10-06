@@ -64,29 +64,28 @@ export function PageEnter({ pkey, children }: { pkey: string; children: ReactNod
 }
 
 /**
- * 列表项依次淡入:每项延迟 35ms,只做首屏前 10 项,之后的直接显示。
- * 用法:<Reveal index={i} as="li" className="...">…</Reveal>
+ * 列表逐项淡入:方案 A 已废除列表 stagger。
+ * 组件保留为纯容器(默认无动画、无延迟),无缝兼容未改的页面引用;
+ * 页面改造时可整体移除 <Reveal> 保留 props,或传 enabled 强行开启。
  */
 export function Reveal({
-  index,
+  index: _index,
   as: Tag = 'div',
   className = '',
   children,
+  enabled = false,
   ...rest
 }: {
   index: number
   as?: keyof React.JSX.IntrinsicElements
   className?: string
   children: ReactNode
+  enabled?: boolean
 } & Record<string, unknown>) {
   const TagEl = Tag as React.ElementType
-  const delay = index < 10 ? { '--i': index } : undefined
+  void _index
   return (
-    <TagEl
-      className={(index < 10 ? `reveal ${className}` : className).trim()}
-      style={{ ...(delay as React.CSSProperties), ...((rest.style as object) ?? {}) }}
-      {...rest}
-    >
+    <TagEl className={className.trim()} {...(rest as object)}>
       {children}
     </TagEl>
   )

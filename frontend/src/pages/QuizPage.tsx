@@ -1,104 +1,48 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { get, post } from '../api/client'
+import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
+import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import type {
+  AnswerIn,
+  AnswerRecord,
+  LibraryDoc,
+  Provenance,
+  Question,
+  QuestionsIn,
+  QuizSession,
+} from '../api/types'
 
 /* ============================================================
-   出题练习页:生成工具条 + 题卡视觉形态(占位数据)
-   后续接入 POST /api/quiz/sessions 后,把 MOCK_QUESTIONS
-   换成接口返回的题目数组即可,视觉结构不变。
+   出题练习页:生成工具条(POST /api/quiz/sessions/{id}/questions)
+   + 题卡视觉 + 作答评分(POST /api/quiz/questions/{qid}/answer)。
+   后端 generator/evaluator 未接入时该端点返回 501,这里给出可见降级提示。
    ============================================================ */
 
-type Difficulty = 1 | 2 | 3 | 4 | 5
+type Layer = Question['layer']
 
-/** 题目结构(与后端 quiz 域字段对齐的占位形态) */
-interface QuizQuestion {
-  id: string
-  question_type: 'concept' | 'coding' | 'system_design' | 'behavioral'
-  difficulty: Difficulty
-  layer: '基础' | '进阶' | '项目' | '开放'
-  stem: string
-  reference_answer: string
-  source_refs: Array<{ filename: string; chunk_index: number; snippet: string }>
+const QUESTION_BADGE: Record<Layer, { label: string; badge: string }> = {
+  core: { label: '通用(基础)', badge: 'badge-neutral' },
+  resume: { label: '项目(进阶)', badge: 'badge-accent' },
+  domain: { label: '领域(开放)', badge: 'badge-success' },
 }
 
-const MOCK_QUESTIONS: QuizQuestion[] = [
-  {
-    id: 'q_01jb9x',
-    question_type: 'concept',
-    difficulty: 3,
-    layer: '基础',
-    stem: '解释 Kafka 中「消费者组(Consumer Group)」的 rebalance 触发条件,以及 rebalance 期间消费会发生了什么。',
-    reference_answer:
-      'rebalance 的常见触发条件:1) 组成员变化——消费者加入或离开(进程崩溃、心跳超时 session.timeout.ms 未续约);2) 订阅的 topic 分区数变化;3) 订阅关系(正则订阅匹配到新 topic)变化。\n\nrebalance 期间:整个消费者组进入 STABLE → PREPARING_REBALANCE 状态,所有成员放弃已分配分区并停止消费(老协议下会 stop-the-world), coordinator 重新分配分区后各消费者重新提交/恢复 offset。频繁 rebalance 通常由消费处理时间超过 max.poll.interval.ms 引起。',
-    source_refs: [
-      {
-        filename: '笔记_Kafka核心机制.md',
-        chunk_index: 12,
-        snippet: '……当 group 下任一成员心跳超时,coordinator 将触发 rebalance,组内所有消费者暂停拉取……',
-      },
-      {
-        filename: '面经_2025秋招_Golang合集.md',
-        chunk_index: 7,
-        snippet: '……面试官追问:rebalance 时为什么不能用抢占式分配?提示 CooperativeStickyAssignor……',
-      },
-    ],
-  },
-  {
-    id: 'q_01jba2',
-    question_type: 'system_design',
-    difficulty: 4,
-    layer: '项目',
-    stem: '你的简历项目里写了「日志采集服务峰值 5 万条/秒」。请设计该服务的背压(backpressure)策略:当下游写入 Elasticsearch 变慢时,如何避免内存暴涨与数据丢失?',
-    reference_answer:
-      '可分层回答:1) 入口限流:按下游健康度动态调整采集端批量大小与并发;2) 有界队列 + 丢弃策略:内存队列设上界,超界按「可丢日志优先丢弃、审计日志落盘」分级处理;3) 批量写 ES 时用 bulk + 重试队列,429 时指数退避;4) 优雅降级:下游不可用时临时落盘(本地 WAL),恢复后回放。强调不丢数据与内存安全之间的取舍是面试考察点。',
-    source_refs: [
-      {
-        filename: '张三_后端工程师_简历.pdf',
-        chunk_index: 3,
-        snippet: '……主导日志采集链路优化,峰值 5 万条/秒,P99 延迟低于 800ms……',
-      },
-    ],
-  },
-  {
-    id: 'q_01jba6',
-    question_type: 'coding',
-    difficulty: 2,
-    layer: '基础',
-    stem: '用 Go 实现一个带过期时间的并发安全 LRU 缓存:Get(key) 与 Set(key, value, ttl),过期项在读取时应被视为不存在。',
-    reference_answer:
-      '核心结构:sync.Mutex(或分片锁降低争用)+ map[key]*list.Element + container/list 维护访问顺序。Get:查 map,命中后检查过期时间(存 absolute deadline),过期则惰性删除并返回 miss,未过期则 MoveToFront。Set:存在则更新值与 deadline 并 MoveToFront,不存在则 PushFront,超容量时 RemoveBack。可补充:后台协程定期清理惰性删除遗漏的尾部过期项。',
-    source_refs: [
-      {
-        filename: '面经_2025秋招_Golang合集.md',
-        chunk_index: 15,
-        snippet: '……手写题:实现带 TTL 的 LRU,考察 map + 双向链表 + 锁粒度设计……',
-      },
-    ],
-  },
+const PACK_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '_core', label: '通用(所有岗位)' },
+  { value: 'tech', label: '互联网/IT' },
 ]
 
-const QUESTION_TYPE_META: Record<QuizQuestion['question_type'], { label: string; badge: string }> = {
-  concept: { label: '概念题', badge: 'badge-neutral' },
-  coding: { label: '编码题', badge: 'badge-accent' },
-  system_design: { label: '系统设计', badge: 'badge-success' },
-  behavioral: { label: '行为面', badge: 'badge-warning' },
-}
-
-const LAYER_BADGE: Record<QuizQuestion['layer'], string> = {
-  基础: 'badge-neutral',
-  进阶: 'badge-accent',
-  项目: 'badge-success',
-  开放: 'badge-warning',
-}
-
-/** 难度星:实心 = 难度,空心 = 剩余 */
-function DifficultyStars({ level }: { level: Difficulty }) {
+function DifficultyStars({ level }: { level: number }) {
+  const clamped = Math.min(5, Math.max(1, Math.round(level || 1)))
   return (
     <span
       className="inline-flex items-center gap-0.5"
       role="img"
-      aria-label={`难度 ${level} / 5`}
-      title={`难度 ${level} / 5`}
+      aria-label={`难度 ${clamped} / 5`}
+      title={`难度 ${clamped} / 5`}
     >
       {Array.from({ length: 5 }, (_, i) => (
         <svg
@@ -106,8 +50,8 @@ function DifficultyStars({ level }: { level: Difficulty }) {
           viewBox="0 0 24 24"
           width="12"
           height="12"
-          fill={i < level ? 'var(--accent)' : 'none'}
-          stroke={i < level ? 'var(--accent)' : 'var(--fg-subtle)'}
+          fill={i < clamped ? 'var(--accent)' : 'none'}
+          stroke={i < clamped ? 'var(--accent)' : 'var(--fg-subtle)'}
           strokeWidth="1.5"
           strokeLinejoin="round"
           aria-hidden="true"
@@ -116,20 +60,221 @@ function DifficultyStars({ level }: { level: Difficulty }) {
         </svg>
       ))}
       <span className="tnum ml-1 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
-        {level}/5
+        {clamped}/5
       </span>
     </span>
   )
 }
 
-/** 单张题卡:题面 / 难度 / layer / 参考答案折叠 / 出处引用块 */
-function QuestionCard({ question, index }: { question: QuizQuestion; index: number }) {
+/** 出处引用块:provenance resume_evidence / reference(file + section) */
+function SourceList({ provenance }: { provenance?: Provenance | null }) {
+  if (!provenance) return null
+  const entries: Array<{ file?: string; section?: string; text?: string }> = []
+  const resume = provenance.resume_evidence as { file?: string; section?: string } | null
+  if (resume && resume.file) entries.push({ file: resume.file, section: resume.section })
+  const reference = provenance.reference as { file?: string; section?: string } | null
+  if (reference && (reference.file || reference.section)) {
+    if (reference.file) entries.push({ file: reference.file, section: reference.section })
+    else entries.push({ text: '资料外知识' })
+  }
+  if (!entries.length) return null
+
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
+        <svg
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-4A1.5 1.5 0 0 1 4 16V5.5Z" />
+          <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h4A1.5 1.5 0 0 0 20 16V5.5Z" />
+        </svg>
+        题目依据以下资料片段生成
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {entries.map((ref, i) => (
+          <blockquote
+            key={i}
+            className="rounded-md px-3 py-2 text-xs leading-relaxed"
+            style={{
+              backgroundColor: 'var(--bg-inset)',
+              borderLeft: '2px solid var(--accent)',
+              color: 'var(--fg-muted)',
+            }}
+          >
+            {ref.file ? (
+              <span className="font-mono text-[11px]" style={{ color: 'var(--accent)' }}>
+                {ref.file}
+              </span>
+            ) : null}
+            {ref.section ? (
+              <span className="tnum mx-1.5 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
+                {ref.file ? '· ' : ''}{ref.section}
+              </span>
+            ) : null}
+            <div className="mt-0.5">{ref.text ?? '该题标记为「原始资料片段出处」'}</div>
+          </blockquote>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** 错误展示:把后端 400/409 的 detail 拿出来当 UI 文本 */
+function detailOf(err: unknown, fallback: string): string {
+  const body = (err as { body?: { detail?: string } }).body
+  return body?.detail ?? (err instanceof Error ? err.message : fallback)
+}
+
+/** 作答区:textarea + 提交评分;评分保存在 <AnswerRecord> 展示 */
+function AnswerPanel({ question, onToast }: { question: Question; onToast: (text: string, kind?: 'success' | 'error' | 'info') => void }) {
+  const [text, setText] = useState('')
+  const [touched, setTouched] = useState(false)
+  const queryClient = useQueryClient()
+  const [answered, setAnswered] = useState<AnswerRecord | null>(null)
+
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const body: AnswerIn = { answer_text: text }
+      const send = (opts: { confirmCloud: boolean }) =>
+        post<AnswerRecord>(`/api/quiz/questions/${question.id}/answer`, body, {
+          query: { confirm_cloud: opts.confirmCloud },
+        })
+      try {
+        return await send({ confirmCloud: false })
+      } catch (err) {
+        return await requestWithCloudConfirm(send, err)
+      }
+    },
+    onSuccess: (result) => {
+      setAnswered(result)
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+      onToast(
+        result.score != null
+          ? `评分 ${result.score}/100,${(result.feedback ?? '').slice(0, 24)}…`
+          : '已提交,但尚未返回评分',
+        result.score != null && result.score >= 60 ? 'success' : 'info',
+      )
+    },
+    onError: (err) => onToast(detailOf(err, '提交失败'), 'error'),
+  })
+
+  const hasScored = answered?.score != null
+
+  return (
+    <div className="mt-3 rounded-md border p-3" style={{ borderColor: 'var(--border)', backgroundColor: 'var(--bg-inset)' }}>
+      {hasScored ? (
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-baseline gap-2.5">
+            <span className="text-2xl font-semibold" style={{ color: (answered!.score ?? 0) >= 60 ? 'var(--success)' : 'var(--warning)' }}>
+              {answered!.score}
+              <span className="ml-1 text-sm" style={{ color: 'var(--fg-subtle)' }}>/ 100</span>
+            </span>
+            {answered?.dim_scores && Object.keys(answered.dim_scores).length > 0 ? (
+              Object.entries(answered.dim_scores).map(([dim, v]) => (
+                <span key={dim} className="badge badge-neutral">
+                  {dim} {v}
+                </span>
+              ))
+            ) : null}
+          </div>
+          {answered?.missed_points && answered.missed_points.length > 0 ? (
+            <div className="px-3 py-2 rounded-md" style={{ backgroundColor: 'var(--warning-soft)', color: 'var(--warning)' }}>
+              <div className="text-xs font-medium mb-1">遗漏要点</div>
+              <ul className="m-0 list-disc pl-5 text-[13px]" style={{ color: 'var(--fg-muted)' }}>
+                {answered.missed_points.map((p: string, i: number) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {answered?.feedback ? (
+            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
+              {answered.feedback}
+            </p>
+          ) : null}
+          <details className="answer-fold">
+            <summary>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="chev">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              我的回答
+            </summary>
+            <div className="answer-fold-body whitespace-pre-wrap">{answered?.answer_text}</div>
+          </details>
+          <button
+            type="button"
+            className="btn btn-ghost self-start"
+            onClick={() => {
+              setAnswered(null)
+              setText('')
+            }}
+          >
+            再答一遍
+          </button>
+        </div>
+      ) : (
+        <div>
+          <label className="field-label mb-1 block" htmlFor={`q-${question.id}-answer`}>
+            作答(对照后端 evaluate 角色评分)
+          </label>
+          <textarea
+            id={`q-${question.id}-answer`}
+            className="input w-full"
+            rows={4}
+            value={text}
+            placeholder="用自己的话作答。点击「提交评分」后,这段话会发给本地/绑定的云端模型按维度打分。"
+            onChange={(e) => {
+              setText(e.target.value)
+              setTouched(true)
+            }}
+            disabled={submitMutation.isPending}
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!touched || !text.trim() || submitMutation.isPending}
+              onClick={() => submitMutation.mutate()}
+            >
+              {submitMutation.isPending ? '评分中…(大模型回复可能需几秒)' : '提交评分'}
+            </button>
+            {submitMutation.isError ? (
+              <span className="text-xs" style={{ color: 'var(--danger)' }}>
+                {detailOf(submitMutation.error, '提交失败')}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 单张题卡:题面 / 难度 / layer / 参考答案折叠 / 出处引用块 + 作答区 */
+function QuestionCard({
+  question,
+  index,
+  onToast,
+}: {
+  question: Question
+  index: number
+  onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
+}) {
   const [revealed, setRevealed] = useState(false)
-  const typeMeta = QUESTION_TYPE_META[question.question_type]
+  const meta = QUESTION_BADGE[question.layer] ?? { label: question.layer, badge: 'badge-neutral' }
+  const reference = question.reference_answer ?? ''
 
   return (
     <Reveal index={index} as="article" className="card card-raised mb-6">
-      {/* 题头:序号 + 类型徽章 + layer 徽章 + 难度星 */}
+      {/* 题头:序号 + layer 徽章 + pack + 难度星 */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span
           className="tnum flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-semibold"
@@ -138,179 +283,326 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
         >
           {index + 1}
         </span>
-        <span className={`badge ${typeMeta.badge}`}>{typeMeta.label}</span>
-        <span className={`badge ${LAYER_BADGE[question.layer]}`}>{question.layer}</span>
+        <span className={`badge ${meta.badge}`}>{meta.label}</span>
+        {question.pack ? (
+          <span className="badge badge-neutral">
+            {PACK_OPTIONS.find((p) => p.value === question.pack)?.label ?? question.pack}
+          </span>
+        ) : null}
         <span className="ml-auto">
-          <DifficultyStars level={question.difficulty} />
+          <DifficultyStars level={question.difficulty ?? 1} />
         </span>
       </div>
 
       {/* 题面 */}
-      <p className="text-[15px] font-medium leading-relaxed">{question.stem}</p>
+      <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap">{question.question}</p>
 
       {/* 参考答案(折叠) */}
-      <details
-        className="answer-fold"
-        open={revealed}
-        onToggle={(e) => setRevealed((e.target as HTMLDetailsElement).open)}
-      >
-        <summary>
-          <svg
-            viewBox="0 0 24 24"
-            width="13"
-            height="13"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className="chev"
-          >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-          {revealed ? '收起参考答案' : '查看参考答案'}
-          <span className="ml-1 font-normal" style={{ color: 'var(--fg-subtle)' }}>
-            (先自己作答再看,记忆效果更好)
-          </span>
-        </summary>
-        <div className="answer-fold-body">
-          {question.reference_answer.split('\n\n').map((para, i) => (
-            <p key={i} className={i > 0 ? 'mt-2.5' : undefined}>
-              {para}
-            </p>
-          ))}
-        </div>
-      </details>
+      {reference ? (
+        <details
+          className="answer-fold"
+          open={revealed}
+          onToggle={(e) => setRevealed((e.target as HTMLDetailsElement).open)}
+        >
+          <summary>
+            <svg
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="chev"
+            >
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+            {revealed ? '收起参考答案' : '查看参考答案'}
+            <span className="ml-1 font-normal" style={{ color: 'var(--fg-subtle)' }}>
+              (先自己作答再看,记忆效果更好)
+            </span>
+          </summary>
+          <div className="answer-fold-body">
+            {reference.split('\n\n').map((para, i) => (
+              <p key={i} className={i > 0 ? 'mt-2.5' : undefined}>
+                {para}
+              </p>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {/* 出处引用块 */}
-      <div className="mt-3">
-        <div className="mb-1.5 flex items-center gap-1.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          <svg
-            viewBox="0 0 24 24"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5h-4A1.5 1.5 0 0 1 4 16V5.5Z" />
-            <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H15a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5h4A1.5 1.5 0 0 0 20 16V5.5Z" />
-          </svg>
-          题目依据以下资料片段生成
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {question.source_refs.map((ref, i) => (
-            <blockquote
-              key={i}
-              className="rounded-md px-3 py-2 text-xs leading-relaxed"
-              style={{
-                backgroundColor: 'var(--bg-inset)',
-                borderLeft: '2px solid var(--accent)',
-                color: 'var(--fg-muted)',
-              }}
-            >
-              <span className="font-mono text-[11px]" style={{ color: 'var(--accent)' }}>
-                {ref.filename}
-              </span>
-              <span className="tnum mx-1.5 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
-                · block #{ref.chunk_index}
-              </span>
-              <div className="mt-0.5">{ref.snippet}</div>
-            </blockquote>
-          ))}
-        </div>
-      </div>
+      <SourceList provenance={question.provenance} />
+
+      <AnswerPanel question={question} onToast={onToast} />
     </Reveal>
   )
 }
 
-/** 生成题目工具条:题型 / 难度 / 范围选择器(样式占位) */
-function GenerateToolbar() {
+/** 错误提示条:把 4xx/5xx/网络失败改为可见文案 */
+function ErrorBar({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div
+      className="rounded-md border px-4 py-3 text-sm"
+      style={{ borderColor: 'var(--danger)', backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
+    >
+      {message}
+      <button type="button" className="btn btn-ghost btn-sm ml-3" onClick={onRetry}>
+        重试
+      </button>
+    </div>
+  )
+}
+
+/** 生成题目工具条:层 / pack / 题数;点击「生成题目」→ 创建会话 + 拉题 */
+function GenerateToolbar({
+  onToast,
+}: {
+  onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
+}) {
+  const queryClient = useQueryClient()
+  const [layer, setLayer] = useState<Layer>('resume')
+  const [pack, setPack] = useState('tech')
+  const [total, setTotal] = useState(3)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const sessionsQuery = useQuery({
+    queryKey: ['quiz', 'sessions'],
+    queryFn: () => get<QuizSession[]>('/api/quiz/sessions'),
+  })
+
+  const latestSession = sessionsQuery.data?.[0]
+
+  const generateMutation = useMutation({
+    mutationFn: async (opts: { reuse: boolean; confirmCloud: boolean }) => {
+      // 1. 无复用会话就先创建一个(kind=quiz)
+      let sessionId: number
+      if (opts.reuse && latestSession) {
+        sessionId = latestSession.id
+      } else {
+        const studio = await post<QuizSession>('/api/quiz/sessions', {
+          kind: 'quiz',
+          title: `练习 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+        })
+        sessionId = studio.id
+      }
+      // 2. 出题:契约以 routes_quiz.QuestionsIn 为准 {layer, pack, counts};
+      //    出 1 道题时 counts 给 {"task": total}? 事实上 counts key 是"能力项名",
+      //    用户还没有抽取能力名,这里传 {"task": total} 后端按能力项名检索挖题。
+      //    等 generator 接入后,再按实际返回调整。
+      const body: QuestionsIn = { layer, pack, counts: { task: total } }
+      const send = (o: { confirmCloud: boolean }) =>
+        post<Question[]>(`/api/quiz/sessions/${sessionId}/questions`, body, {
+          query: { confirm_cloud: o.confirmCloud },
+        })
+      try {
+        return { sessionId, questions: await send({ confirmCloud: false }) }
+      } catch (err) {
+        const questions = await requestWithCloudConfirm(send, err)
+        return { sessionId, questions }
+      }
+    },
+    onSuccess: ({ questions }) => {
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+      setFormError(null)
+      onToast(`生成完成:${questions.length} 题(会话已保留,可继续在复习看板跟进)`, 'success')
+    },
+    onError: (err) => {
+      setFormError(detailOf(err, '生成失败,请稍后重试'))
+    },
+  })
+
+  const submittable =
+    !generateMutation.isPending && !sessionsQuery.isLoading
+
+  // 生成的题目从“最新会话”拉;在 QueryClient 缓存里挑出本轮 session 的题
+  const generatedQuestions = latestSession?.questions ?? []
+
+  function submit() {
+    setFormError(null)
+    generateMutation.mutate({ reuse: false, confirmCloud: false })
+  }
+
   return (
     <section className="card card-raised mb-8">
       <h2 className="mb-3 text-base font-semibold">生成题目</h2>
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[130px]">
-          <label className="field-label mb-1" htmlFor="quiz-type">
-            题型
+        <div className="min-w-[150px]">
+          <label className="field-label mb-1" htmlFor="quiz-layer">
+            层级(出题范围)
           </label>
-          <select id="quiz-type" className="input">
-            <option>全部题型</option>
-            <option>概念题</option>
-            <option>编码题</option>
-            <option>系统设计</option>
-            <option>行为面</option>
+          <select
+            id="quiz-layer"
+            className="input"
+            value={layer}
+            onChange={(e) => setLayer(e.target.value as Layer)}
+          >
+            <option value="core">基础(通用能力)</option>
+            <option value="resume">项目(简历深挖)</option>
+            <option value="domain">领域(知识点)</option>
+          </select>
+        </div>
+
+        <div className="min-w-[160px]">
+          <label className="field-label mb-1" htmlFor="quiz-pack">
+            行业包
+          </label>
+          <select id="quiz-pack" className="input" value={pack} onChange={(e) => setPack(e.target.value)}>
+            {PACK_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </div>
 
         <div className="min-w-[110px]">
-          <label className="field-label mb-1" htmlFor="quiz-difficulty">
-            难度
-          </label>
-          <select id="quiz-difficulty" className="input" defaultValue="3">
-            <option value="1">★☆☆☆☆ 入门</option>
-            <option value="2">★★☆☆☆ 简单</option>
-            <option value="3">★★★☆☆ 中等</option>
-            <option value="4">★★★★☆ 较难</option>
-            <option value="5">★★★★★ 硬核</option>
-          </select>
-        </div>
-
-        <div className="min-w-[180px]">
-          <label className="field-label mb-1" htmlFor="quiz-scope">
-            出题范围
-          </label>
-          <select id="quiz-scope" className="input">
-            <option>全部资料库</option>
-            <option>简历 + 当前目标岗位</option>
-            <option>仅面经文档</option>
-            <option>仅笔记文档</option>
-          </select>
-        </div>
-
-        <div className="min-w-[100px]">
-          <label className="field-label mb-1" htmlFor="quiz-count">
+          <label className="field-label mb-1" htmlFor="quiz-total">
             题目数量
           </label>
-          <select id="quiz-count" className="input" defaultValue="5">
+          <select
+            id="quiz-total"
+            className="input"
+            value={String(total)}
+            onChange={(e) => setTotal(Number(e.target.value))}
+          >
+            <option value="1">1 题</option>
             <option value="3">3 题</option>
             <option value="5">5 题</option>
             <option value="10">10 题</option>
           </select>
         </div>
 
-        <button type="button" className="btn btn-primary h-[32px]" disabled>
-          生成题目
+        <button
+          type="button"
+          className="btn btn-primary h-[32px]"
+          disabled={!submittable}
+          onClick={submit}
+        >
+          {generateMutation.isPending ? '生成中…(检索+LLM 出题)' : '生成题目'}
         </button>
       </div>
       <p className="mt-2.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
         出题仅使用标记为「仅本机」的模型时,资料内容不会离开本机;每道题都会附上来源片段,便于回查原文。
       </p>
+
+      {formError ? (
+        <div className="mt-3">
+          <ErrorBar message={formError} onRetry={() => generateMutation.mutate({ reuse: false, confirmCloud: false })} />
+        </div>
+      ) : null}
+
+      {generateMutation.isSuccess ? (
+        <p className="mt-3 text-xs" style={{ color: 'var(--success)' }}>
+          已生成 {generatedQuestions.length} 题,见下方题卡。
+        </p>
+      ) : null}
     </section>
   )
 }
 
-/** /quiz 出题练习:生成工具条 + 题卡列表(占位数据展示完整视觉形态) */
-export default function QuizPage() {
+/** 题目列表:拉 sessions 明细里最新会话的题 */
+function QuestionList({
+  latestSession,
+  onToast,
+}: {
+  latestSession: QuizSession | null | undefined
+  onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
+}) {
+  const questions = latestSession?.questions ?? []
+  if (!questions.length) return null
+
   return (
     <div>
+      {questions.map((q, i) => (
+        <QuestionCard key={q.id} question={q} index={i} onToast={onToast} />
+      ))}
+    </div>
+  )
+}
+
+/** 空态:还没有出过题 */
+function EmptyQuestionList() {
+  return (
+    <section className="rounded-[10px] border border-dashed px-6 py-10 text-center" style={{ borderColor: 'var(--border)' }}>
+      <svg
+        viewBox="0 0 24 24"
+        width="34"
+        height="34"
+        fill="none"
+        stroke="var(--fg-subtle)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="mx-auto"
+      >
+        <path d="M5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 16 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z" />
+        <path d="M7.5 8.5h7M7.5 12h7M7.5 15.5h4" />
+        <path d="m17.5 14.5 3-3M20.5 11.5l1.5 1.5-3.5 3.5-2 .5.5-2Z" />
+      </svg>
+      <h2 className="mt-3 text-base font-semibold">还没有生成过题目</h2>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
+        选好层级和行业包,点击「生成题目」开始。题目会基于已上传的资料生成,每道题带出处,便于回查。
+      </p>
+      <p className="mt-2 text-xs" style={{ color: 'var(--fg-subtle)' }}>
+        没资料?先到 <Link to="/" className="underline" style={{ color: 'var(--accent)' }}>资料库</Link> 上传一份简历或笔记。
+      </p>
+    </section>
+  )
+}
+
+export default function QuizPage() {
+  const { toast, show } = useToast()
+
+  // 会话列表:GET /api/quiz/sessions(附 n_questions 但不含题目本体)
+  // 最新一次会话详情:GET /api/quiz/sessions/{id}(内含 questions + answers),用于渲染题卡
+  const detailQuery = useQuery({
+    queryKey: ['quiz', 'latest-session'],
+    queryFn: async () => {
+      const sessions = await get<QuizSession[]>('/api/quiz/sessions')
+      if (!sessions.length) return null
+      return await get<QuizSession>(`/api/quiz/sessions/${sessions[0].id}`)
+    },
+  })
+
+  const docsQuery = useQuery({
+    queryKey: ['docs'],
+    queryFn: () => get<LibraryDoc[]>('/api/docs'),
+  })
+  const docCount = docsQuery.data?.length ?? 0
+
+  return (
+    <div>
+      {toast}
       <PageHeader
         title="出题练习"
         description="基于资料库与目标岗位生成练习题并作答"
         actions={
           <span className="tnum text-xs" style={{ color: 'var(--fg-subtle)' }}>
-            本组 3 题 · 已答 0
+            资料库 {docCount} 份 · 已答 {detailQuery.data?.questions?.filter((q) => (q.answers?.length ?? 0) > 0).length ?? 0} 题
           </span>
         }
       />
-      <GenerateToolbar />
-      {MOCK_QUESTIONS.map((q, i) => (
-        <QuestionCard key={q.id} question={q} index={i} />
-      ))}
+
+      {detailQuery.isError ? (
+        <div className="mb-6">
+          <ErrorBar
+            message={`读取会话失败:请确认后端已启动(127.0.0.1:8000)。${(detailQuery.error as Error)?.message ?? ''}`}
+            onRetry={() => void detailQuery.refetch()}
+          />
+          <div className="mt-4">
+            <GenerateToolbar onToast={show} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <GenerateToolbar onToast={show} />
+          <QuestionList latestSession={detailQuery.data} onToast={show} />
+          {!detailQuery.isLoading && !detailQuery.data?.questions?.length ? <EmptyQuestionList /> : null}
+        </>
+      )}
     </div>
   )
 }
