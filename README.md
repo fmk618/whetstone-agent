@@ -140,31 +140,6 @@ uv run --python 3.11 python -m scripts.p0_check path/to/notes.md
 
 检测到敏感信息时，命令行会在发送云端前要求确认；疑似扫描 PDF 会提示当前版本没有 OCR。
 
-## 配置、隐私与安全
-
-### 服务商与角色路由
-
-- `backend/config/providers.yaml` 保存服务商 ID、兼容接口地址和 Key 对应的环境变量名；默认预置千问、豆包、Kimi、DeepSeek、Ollama，并提供 Qianfan、LM Studio 等预设地址。
-- `backend/config/settings.yaml` 的 `routing` 段配置角色与模型，例如：
-
-  ```yaml
-  routing:
-    generate: { provider: qwen, model: qwen-plus }
-    evaluate: { provider: ollama, model: your-local-model }
-    embed: { provider: qwen, model: your-embedding-model }
-  ```
-
-- 模型名称不写死在代码中。也可以通过设置页对应的 API 修改服务商和角色路由。
-- `.env.development`、`.env.production` 等文件只在本机加载，并已被 `.gitignore` 排除。可用变量包括 `DASHSCOPE_API_KEY`、`ARK_API_KEY`、`MOONSHOT_API_KEY` 和 `DEEPSEEK_API_KEY`。
-
-### 默认的数据与隐私策略
-
-- 默认监听 `127.0.0.1:8000`，运行时数据库、原始文件和 ChromaDB 位于项目根目录的 `data/`，该目录不提交到 Git。
-- 上传内容会按 `backend/config/settings.yaml` 中的规则检测手机号、邮箱、身份证号和银行卡号。命中后默认标记 `local_only`；发送到云端需要通过 `confirm_cloud=true` 完成知情确认。
-- Key 只从环境变量或本机配置读取；设置接口只返回“已设置/未设置”，不会把明文 Key 返回给前端。
-- 若要公网部署，必须自行配置 HTTPS、反向代理和访问认证，并将 Key 放在服务端环境变量或安全的密钥管理系统中；当前项目默认配置不是多用户生产部署方案。
-- 本项目不保证第三方模型服务商的留存、训练或跨境策略。使用云端服务前，请自行阅读对应服务商的隐私条款。
-
 ## 项目结构
 
 ```text
@@ -199,33 +174,6 @@ whetstone-agent/
 ├── data/                         # 运行时数据，已被 gitignore 排除
 └── LICENSE                       # Apache License 2.0
 ```
-
-## 开发与测试
-
-后端测试使用 pytest 和 pytest-asyncio，测试通过夹具替换 LLM/嵌入服务，不需要真实 API Key：
-
-```bash
-cd backend
-uv sync
-uv run --python 3.11 pytest -q
-```
-
-常用的定向测试：
-
-```bash
-uv run --python 3.11 pytest tests/test_api_quiz_flow.py -q
-uv run --python 3.11 pytest tests/test_generator.py tests/test_ingest.py -q
-```
-
-前端类型检查和生产构建：
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-`npm run build` 会先执行 `tsc --noEmit`，再运行 Vite 构建。开发时可使用 `npm run dev`，构建产物可使用 `npm run preview` 预览。
 
 ## 许可证
 
