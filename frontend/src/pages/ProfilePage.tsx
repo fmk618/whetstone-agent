@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { get, post } from '../api/client'
 import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
+import { DocumentUploadZone } from '../components/DocumentUploadZone'
+import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { CountUp, Reveal } from '../components/Motion'
 import type { LibraryDoc, ProfileClaim } from '../api/types'
@@ -74,9 +76,9 @@ function EmptyState() {
       </svg>
       <h2 className="mt-3 text-base font-semibold">档案还是空的</h2>
       <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
-        上传第一份简历或项目文档后,系统会自动抽取能力项生成知识档案。每个能力项都带有可回溯的原文出处。
+        上传简历后，系统会整理你的能力项并保留原文出处。项目、笔记等资料可以继续补充，但不是开始练习的前提。
       </p>
-      <Link to="/" className="btn btn-primary mt-4">先上传资料</Link>
+      <Link to="/" className="btn btn-primary mt-4">去上传简历</Link>
     </section>
   )
 }
@@ -181,6 +183,7 @@ function CompetencyCard({ c, revealIndex }: { c: CompetencyCardData; revealIndex
 }
 
 export default function ProfilePage() {
+  const { toast, show } = useToast()
   const docsQuery = useQuery({
     queryKey: ['docs'],
     queryFn: () => get<LibraryDoc[]>('/api/docs'),
@@ -250,6 +253,7 @@ export default function ProfilePage() {
 
   return (
     <div>
+      {toast}
       <PageHeader
         title="知识档案"
         actions={
@@ -262,6 +266,18 @@ export default function ProfilePage() {
             {extractMutation.isPending ? '提取中…' : '提取知识档案'}
           </button>
         }
+      />
+
+      <DocumentUploadZone
+        onToast={show}
+        options={[
+          { value: 'project', label: '项目文档' },
+          { value: 'notes', label: '笔记 / 面经' },
+          { value: 'jd', label: '岗位描述' },
+          { value: 'reference', label: '参考资料' },
+        ]}
+        title="补充资料"
+        description="项目和笔记可以补充能力证据；岗位描述和参考资料用于练习时提供上下文。"
       />
 
       {extractMutation.isError ? (
@@ -280,7 +296,7 @@ export default function ProfilePage() {
       ) : hasNoDoc ? (
         <EmptyState />
       ) : totalClaims === 0 ? (
-        <EmptyStateWithDocs />
+        <EmptyStateWithDocs canExtract={profileDocs.length > 0} />
       ) : (
         <>
           <SummaryStrip
@@ -302,7 +318,7 @@ export default function ProfilePage() {
 }
 
 /** 有文档但抽取还是空(后端能力抽取还没跑)的另一种空态 */
-function EmptyStateWithDocs() {
+function EmptyStateWithDocs({ canExtract }: { canExtract: boolean }) {
   return (
     <section className="card p-8 text-center md:p-10">
       <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="var(--fg-subtle)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mx-auto">
@@ -311,7 +327,9 @@ function EmptyStateWithDocs() {
       </svg>
       <h2 className="mt-3 text-base font-semibold">还没有抽取记录</h2>
       <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
-        文档已经上传。点击上方「提取知识档案」，系统会从简历、项目和笔记中整理能力项，并保留原文出处。
+        {canExtract
+          ? '文档已经上传。点击上方「提取知识档案」，系统会从简历、项目和笔记中整理能力项，并保留原文出处。'
+          : '当前只有补充资料。请先在资料库上传简历，简历单独就可以生成知识档案和出题练习。'}
       </p>
     </section>
   )
