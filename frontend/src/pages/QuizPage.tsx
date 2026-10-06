@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { get, post } from '../api/client'
 import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
@@ -536,7 +535,7 @@ function EmptyQuestionList() {
       </svg>
       <h2 className="mt-3 text-base font-semibold">还没有生成过题目</h2>
       <p className="mt-2 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-        没资料?先到 <Link to="/" className="underline" style={{ color: 'var(--accent)' }}>资料库</Link> 上传一份简历或笔记。
+        还没有生成题目。选择出题层级后，点击上方「生成题目」开始练习。
       </p>
     </section>
   )

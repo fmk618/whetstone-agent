@@ -14,9 +14,15 @@ export interface DocumentUploadOption {
 
 interface DocumentUploadZoneProps {
   onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
+  onUploaded?: (data: UploadDocResponse) => Promise<void>
   options: DocumentUploadOption[]
   title: string
   description: string
+}
+
+type UploadMessage = {
+  status: 'success' | 'partial' | 'error'
+  text: string
 }
 
 function formatBytes(n: number): string {
@@ -27,6 +33,7 @@ function formatBytes(n: number): string {
 
 export function DocumentUploadZone({
   onToast,
+  onUploaded,
   options,
   title,
   description,
@@ -36,7 +43,7 @@ export function DocumentUploadZone({
   const [dragOver, setDragOver] = useState(false)
   const [picked, setPicked] = useState<File | null>(null)
   const [docType, setDocType] = useState<DocType>(options[0]?.value ?? 'resume')
-  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [uploadMsg, setUploadMsg] = useState<UploadMessage | null>(null)
 
   function pickFile(e: ChangeEvent<HTMLInputElement>) {
     setPicked(e.target.files?.[0] ?? null)
@@ -65,32 +72,48 @@ export function DocumentUploadZone({
         return await requestWithCloudConfirm(send, err)
       }
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       void queryClient.invalidateQueries({ queryKey: ['docs'] })
       void queryClient.invalidateQueries({ queryKey: ['profile'] })
       setPicked(null)
       if (fileRef.current) fileRef.current.value = ''
       const prefix = data.skipped ? '上传成功（同一文件已入库，本次跳过）' : '上传成功'
-      setUploadMsg({
-        ok: true,
-        text: `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`,
-      })
-      onToast(`已上传《${data.filename}》（${data.n_chunks} 块）`, 'success')
+      const baseText = `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`
+
+      if (!onUploaded) {
+        setUploadMsg({ status: 'success', text: baseText })
+        onToast(`已上传《${data.filename}》（${data.n_chunks} 块）`, 'success')
+        return
+      }
+
+      try {
+        await onUploaded(data)
+        setUploadMsg({ status: 'success', text: `${baseText}，已完成能力抽取，可以开始出题练习。` })
+        onToast(`已上传《${data.filename}》，并完成能力抽取`, 'success')
+      } catch (err) {
+        const body = (err as { body?: { detail?: string } }).body
+        const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
+        setUploadMsg({
+          status: 'partial',
+          text: `${baseText}。简历已保存，但能力抽取未完成，请到知识档案页重试。${detail}`,
+        })
+        onToast(`《${data.filename}》已保存，但能力抽取未完成`, 'error')
+      }
     },
     onError: (err) => {
       const text = err instanceof Error ? err.message : String(err)
       const body = (err as { body?: { detail?: string } }).body
-      setUploadMsg({ ok: false, text: body?.detail || text })
+      setUploadMsg({ status: 'error', text: body?.detail || text })
     },
   })
 
   function submit() {
     if (!picked) {
-      setUploadMsg({ ok: false, text: '请先选择一个文件' })
+      setUploadMsg({ status: 'error', text: '请先选择一个文件' })
       return
     }
     if (picked.size > MAX_SIZE) {
-      setUploadMsg({ ok: false, text: '文件超过 20 MB，请压缩或拆分后再上传' })
+      setUploadMsg({ status: 'error', text: '文件超过 20 MB，请压缩或拆分后再上传' })
       return
     }
     setUploadMsg(null)
@@ -185,11 +208,13 @@ export function DocumentUploadZone({
 
       {uploadMsg ? (
         <div
-          className={`upload-message ${uploadMsg.ok ? 'is-success' : 'is-error'}`}
-          role={uploadMsg.ok ? 'status' : 'alert'}
+          className={`upload-message ${uploadMsg.status === 'success' ? 'is-success' : 'is-error'}`}
+          role={uploadMsg.status === 'error' ? 'alert' : 'status'}
           aria-live="polite"
         >
-          <strong>{uploadMsg.ok ? '上传成功' : '上传失败'}</strong>
+          <strong>
+            {uploadMsg.status === 'success' ? '上传成功' : uploadMsg.status === 'partial' ? '已上传，待完成' : '上传失败'}
+          </strong>
           <span>{uploadMsg.text}</span>
         </div>
       ) : null}

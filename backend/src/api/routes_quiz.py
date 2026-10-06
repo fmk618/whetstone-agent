@@ -214,8 +214,8 @@ async def create_questions(session_id: int, body: QuestionsIn) -> dict:
     if not claims_rows:
         raise HTTPException(
             status_code=400,
-            detail="请先上传并完成资料抽取:到 /api/docs 上传简历/项目/笔记,"
-                   "系统抽取能力声明后才能出题。")
+            detail="简历或其他资料已经上传,但能力档案还没有完成抽取。请到知识档案点击「提取知识档案」后再出题。",
+        )
 
     pack_id = CORE_PACK if body.layer == "core" else (
         body.pack_id or body.pack or DEFAULT_PACK)
