@@ -1,38 +1,6 @@
 import { useState } from 'react'
-import type { ReactNode } from 'react'
-
-export interface PageHeaderProps {
-  title: string
-  description: string
-  actions?: ReactNode
-}
-
-/** 页面统一页头:标题 + 一句话说明 + 右侧动作区 */
-export function PageHeader({ title, description, actions }: PageHeaderProps) {
-  return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold tracking-wide">{title}</h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--fg-muted)' }}>
-          {description}
-        </p>
-      </div>
-      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-    </header>
-  )
-}
-
-/** 占位块:标明该区块属于哪期施工 */
-export function WipPlaceholder({ label, phase = '后续迭代' }: { label: string; phase?: string }) {
-  return (
-    <div
-      className="rounded-md border border-dashed px-4 py-6 text-center text-sm"
-      style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
-    >
-      {label} · <span className="font-medium">施工中</span>({phase})
-    </div>
-  )
-}
+import { PageHeader } from '../components/PageHeader'
+import { Reveal } from '../components/Motion'
 
 /* ============================================================
    资料库页内部小组件(仅供本页使用)
@@ -122,8 +90,13 @@ const MOCK_SIZES: Record<string, number> = {
 /** 区域一:上传(拖放框样式,静态占位,不接真实上传) */
 function UploadZone() {
   return (
-    <section className="card mb-4">
-      <h2 className="mb-3 text-base font-semibold">上传文档</h2>
+    <section className="card card-raised mb-6">
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-semibold">上传文档</h2>
+        <span className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
+          支持 PDF / Word / Markdown · 单个文件不超过 20 MB
+        </span>
+      </div>
       <button
         type="button"
         className="dropzone w-full"
@@ -144,71 +117,63 @@ function UploadZone() {
           <path d="M4 15v3A2.5 2.5 0 0 0 6.5 20.5h11A2.5 2.5 0 0 0 20 18v-3" />
         </svg>
         <div className="text-sm font-medium">拖拽文件到此处,或点击选择</div>
-        <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          支持 PDF / Word / Markdown · 单个文件不超过 20 MB
-        </div>
       </button>
-      <p className="mt-2.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
+      <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--fg-subtle)' }}>
         上传前请确认文件中不含身份证号、真实手机号等隐私信息;标记为「仅本机」的内容永远不会离开这台电脑。
       </p>
     </section>
   )
 }
 
-/** 区域二:可折叠隐私说明条 */
-function PrivacyNote() {
-  return (
-    <details className="privacy-note mb-4">
-      <summary>
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M12 3 4.5 6v5.2c0 4.6 3.2 7.9 7.5 9.3 4.3-1.4 7.5-4.7 7.5-9.3V6L12 3Z" />
-        </svg>
-        隐私与敏感级别说明
-        <span className="chev ml-auto" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </span>
-      </summary>
-      <div className="privacy-note-body">
-        <p>
-          <strong style={{ color: 'var(--success)' }}>仅本机(local_only)</strong>
-          :文档切片、向量化与出题推理全部在本机模型上完成,数据不出本机。
-        </p>
-        <p className="mt-1.5">
-          <strong style={{ color: 'var(--warning)' }}>可用云端(cloud_ok)</strong>
-          :内容可能发送到云端模型。即使如此,任何一次实际外发前都会弹出
-          <span className="tnum font-medium">「我已知情,同意发送」</span>
-          确认框,你不同意就不会发送。
-        </p>
-        <p className="mt-1.5">
-          在「设置 → 模型服务」中可以调整每个 provider 的 local_only 标记;标记为仅本机的文档一旦需要云端能力,任务会直接被后端拦截(409)。
-        </p>
-      </div>
-    </details>
-  )
-}
-
-/** 区域三:文档列表表格 */
+/** 区域二:文档列表 —— 桌面为表格,手机端卡片化 */
 function DocTable() {
   const [docs] = useState<DocRow[]>(MOCK_DOCS)
 
-  return (
-    <section className="card p-0">
-      <div className="flex items-center justify-between px-5 pb-1 pt-4">
-        <h2 className="text-base font-semibold">文档列表</h2>
-        <span className="tnum text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          共 {docs.length} 份
-        </span>
-      </div>
-      <div className="overflow-x-auto px-2 pb-2">
+  // 手机端:每份文档一张卡
+  function DocCards() {
+    return (
+      <ul className="flex flex-col gap-3 md:hidden" role="list">
+        {docs.map((doc, i) => {
+          const typeMeta = DOC_TYPE_META[doc.doc_type]
+          return (
+            <Reveal key={doc.id} index={i} as="li" className="rounded-lg border p-4" data-mobile="card">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium break-all">{doc.filename}</div>
+                  <div className="tnum mt-1 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
+                    {doc.id}
+                  </div>
+                </div>
+                <SensitivityBadge level={doc.sensitivity} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs" style={{ color: 'var(--fg-muted)' }}>
+                <span className={`badge ${typeMeta.badge}`}>{typeMeta.label}</span>
+                <span className="tnum">{doc.n_chunks} 块</span>
+                <span className="tnum">{formatBytes(MOCK_SIZES[doc.id] ?? 0)}</span>
+                <span className="tnum">{doc.created_at}</span>
+              </div>
+              <div className="mt-3 flex gap-2 border-t pt-3">
+                <button type="button" className="btn btn-ghost btn-sm" disabled title="重建索引(P2)">重建索引</button>
+                <button type="button" className="btn btn-ghost btn-sm" disabled title="删除文档(P2)" style={{ color: 'var(--danger)' }}>删除</button>
+              </div>
+            </Reveal>
+          )
+        })}
+      </ul>
+    )
+  }
+
+  // 平板/桌面:表格,横向可滚兜底
+  function DocTableDesktop() {
+    return (
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr style={{ color: 'var(--fg-subtle)' }}>
               {['名称', '类型', '敏感级别', '块数', '大小', '导入时间', '操作'].map((h) => (
                 <th
                   key={h}
-                  className="whitespace-nowrap border-b px-3 py-2 text-left text-xs font-medium"
+                  className="whitespace-nowrap border-b px-3 py-2.5 text-left text-xs font-medium"
                   style={{ borderColor: 'var(--border)' }}
                   scope="col"
                 >
@@ -218,75 +183,81 @@ function DocTable() {
             </tr>
           </thead>
           <tbody>
-            {docs.map((doc) => {
-              const typeMeta = DOC_TYPE_META[doc.doc_type]
-              return (
-                <tr key={doc.id} className="group transition-colors">
-                  <td
-                    className="border-b px-3 py-2.5 font-medium group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    {doc.filename}
-                    <div className="tnum mt-0.5 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
-                      {doc.id}
-                    </div>
-                  </td>
-                  <td
-                    className="border-b px-3 py-2.5 group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    <span className={`badge ${typeMeta.badge}`}>{typeMeta.label}</span>
-                  </td>
-                  <td
-                    className="border-b px-3 py-2.5 group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    <SensitivityBadge level={doc.sensitivity} />
-                  </td>
-                  <td
-                    className="tnum border-b px-3 py-2.5 font-mono text-[13px] group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    {doc.n_chunks}
-                  </td>
-                  <td
-                    className="tnum border-b px-3 py-2.5 text-xs group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
-                  >
-                    {formatBytes(MOCK_SIZES[doc.id] ?? 0)}
-                  </td>
-                  <td
-                    className="tnum border-b px-3 py-2.5 text-xs group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
-                  >
-                    {doc.created_at}
-                  </td>
-                  <td
-                    className="border-b px-3 py-2.5 group-hover:bg-[var(--bg-inset)]"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    <div className="flex gap-1.5">
-                      <button type="button" className="btn btn-ghost btn-sm" disabled title="重建索引(P2)">
-                        重建索引
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled
-                        title="删除文档(P2)"
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {docs.map((doc, i) => (
+              <Reveal
+                key={doc.id}
+                index={i}
+                as="tr"
+                className="group"
+              >
+                <td
+                  className="border-b px-3 py-3 font-medium"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  {doc.filename}
+                  <div className="tnum mt-0.5 font-mono text-[11px]" style={{ color: 'var(--fg-subtle)' }}>
+                    {doc.id}
+                  </div>
+                </td>
+                <td className="border-b px-3 py-3" style={{ borderColor: 'var(--border)' }}>
+                  <span className={`badge ${DOC_TYPE_META[doc.doc_type].badge}`}>{DOC_TYPE_META[doc.doc_type].label}</span>
+                </td>
+                <td className="border-b px-3 py-3" style={{ borderColor: 'var(--border)' }}>
+                  <SensitivityBadge level={doc.sensitivity} />
+                </td>
+                <td
+                  className="tnum border-b px-3 py-3 font-mono text-[13px]"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  {doc.n_chunks}
+                </td>
+                <td
+                  className="tnum border-b px-3 py-3 text-xs"
+                  style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
+                >
+                  {formatBytes(MOCK_SIZES[doc.id] ?? 0)}
+                </td>
+                <td
+                  className="tnum border-b px-3 py-3 text-xs"
+                  style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
+                >
+                  {doc.created_at}
+                </td>
+                <td className="border-b px-3 py-3" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex gap-1.5">
+                    <button type="button" className="btn btn-ghost btn-sm" disabled title="重建索引(P2)">
+                      重建索引
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled
+                      title="删除文档(P2)"
+                      style={{ color: 'var(--danger)' }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
+              </Reveal>
+            ))}
           </tbody>
         </table>
       </div>
-      <p className="px-5 pb-4 pt-1 text-xs" style={{ color: 'var(--fg-subtle)' }}>
+    )
+  }
+
+  return (
+    <section className="card p-5 md:p-6">
+      <div className="mb-4 flex items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold">文档列表</h2>
+        <span className="tnum text-xs" style={{ color: 'var(--fg-subtle)' }}>
+          共 {docs.length} 份
+        </span>
+      </div>
+      <DocCards />
+      <DocTableDesktop />
+      <p className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--fg-subtle)' }}>
         切片(block)由后端入库时自动计算;「重建索引」会在文档内容变更后重新向量化。
       </p>
     </section>
@@ -307,7 +278,6 @@ export default function LibraryPage() {
         }
       />
       <UploadZone />
-      <PrivacyNote />
       <DocTable />
     </div>
   )

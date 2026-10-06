@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { Reveal } from '../components/Motion'
 
 /* ============================================================
    出题练习页:生成工具条 + 题卡视觉形态(占位数据)
@@ -127,7 +128,7 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
   const typeMeta = QUESTION_TYPE_META[question.question_type]
 
   return (
-    <article className="card mb-4">
+    <Reveal index={index} as="article" className="card card-raised mb-6">
       {/* 题头:序号 + 类型徽章 + layer 徽章 + 难度星 */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span
@@ -223,14 +224,14 @@ function QuestionCard({ question, index }: { question: QuizQuestion; index: numb
           ))}
         </div>
       </div>
-    </article>
+    </Reveal>
   )
 }
 
 /** 生成题目工具条:题型 / 难度 / 范围选择器(样式占位) */
 function GenerateToolbar() {
   return (
-    <section className="card mb-5">
+    <section className="card card-raised mb-8">
       <h2 className="mb-3 text-base font-semibold">生成题目</h2>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[130px]">

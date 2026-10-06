@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { CountUp } from '../components/Motion'
 
 /* -----
  * 占位:多轮对话式模拟面试(方案 7.6,后端 routes_interview.py,接 SSE 流式)。
@@ -112,7 +113,7 @@ export default function InterviewPage() {
               className="tnum badge badge-neutral"
               aria-live="polite"
             >
-              第 {round} / {TOTAL_ROUNDS} 轮
+              第 <CountUp value={round} duration={350} /> / {TOTAL_ROUNDS} 轮
             </span>
             <button className="btn btn-primary">结束并生成报告</button>
           </>
@@ -122,7 +123,7 @@ export default function InterviewPage() {
       {/* 对话区。min-h-0 允许 flex 子项在竖向上触发滚动,避免整页塌陷 */}
       <div
         ref={scrollRef}
-        className="card flex flex-1 flex-col gap-4 overflow-y-auto py-5"
+        className="card flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-6 md:px-6"
         style={{ minHeight: 0 }}
         aria-label="面试对话区"
       >
@@ -138,7 +139,7 @@ export default function InterviewPage() {
       </div>
 
       {/* 输入区 */}
-      <footer className="mt-3 flex items-end gap-2">
+      <footer className="mt-5 flex items-end gap-3">
         <label className="sr-only" htmlFor="answer-input">
           输入回答
         </label>

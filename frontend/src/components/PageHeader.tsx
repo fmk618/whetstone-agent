@@ -6,17 +6,17 @@ export interface PageHeaderProps {
   actions?: ReactNode
 }
 
-/** 页面统一页头:标题 + 一句话说明 + 右侧动作区 */
+/** 页面统一页头:大标题 + 一句副标题 + 右侧主操作区 */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--fg-muted)' }}>
+    <header className="mb-7 flex flex-wrap items-start justify-between gap-x-6 gap-y-3 md:mb-8">
+      <div className="min-w-0">
+        <h1 className="text-[22px] font-semibold leading-tight tracking-wide">{title}</h1>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
           {description}
         </p>
       </div>
-      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 items-center gap-2 pt-1">{actions}</div> : null}
     </header>
   )
 }
@@ -25,7 +25,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
 export function WipPlaceholder({ label, phase = '后续迭代' }: { label: string; phase?: string }) {
   return (
     <div
-      className="rounded-md border border-dashed px-4 py-6 text-center text-sm"
+      className="rounded-md border border-dashed px-4 py-5 text-center text-sm"
       style={{ borderColor: 'var(--border)', color: 'var(--fg-muted)' }}
     >
       {label} · <span className="font-medium">施工中</span>({phase})
