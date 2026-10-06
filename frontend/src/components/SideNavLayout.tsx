@@ -167,7 +167,9 @@ function RailItem({
       {() => (
         <>
           <span className="grid h-9 w-9 shrink-0 place-items-center">{item.icon}</span>
-          <span className="rail-pill-label">{item.label}</span>
+          <span className="rail-pill">
+            <span className="rail-pill-label">{item.label}</span>
+          </span>
         </>
       )}
     </NavLink>
@@ -235,16 +237,15 @@ export function SideNavLayout() {
         className="hidden w-14 shrink-0 flex-col pb-4 pt-5 md:flex lg:w-16"
         aria-label="主导航"
       >
-        {/* 品牌印:仅 Mark,不参与 morph;与导航项同左缘(px-[12px])保证垂直基线对齐 */}
-        <div className="flex items-center px-[12px]">
-          <NavLink
-            to="/"
-            aria-label="磨刀石 · 资料库"
-            className="grid h-9 w-9 shrink-0 place-items-center"
-          >
-            <WhetstoneMark size={24} />
-          </NavLink>
-        </div>
+        {/* 品牌区:Mark 图标;「磨刀石」文字在其下方(装订线仅 56/64px,放不下横排) */}
+        <NavLink
+          to="/"
+          aria-label="磨刀石 · 资料库"
+          className="flex flex-col items-center gap-[2px] px-[12px] py-1"
+        >
+          <WhetstoneMark size={24} />
+          <span className="brand-name">磨刀石</span>
+        </NavLink>
 
         <nav className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[12px]" aria-label="主导航链接">
           {RAIL_ITEMS.map((item) => (
@@ -269,7 +270,7 @@ export function SideNavLayout() {
 
       {/* 内容区:装订线右侧直接开始,页头由各页 PageHeader 提供 */}
       <main
-        className="min-w-0 flex-1 overflow-y-auto px-4 pt-6 pb-[80px] md:px-6 md:py-8 md:pb-8 lg:px-8 lg:pb-8 xl:px-10"
+        className="min-w-0 flex-1 overflow-y-auto px-4 pt-6 pb-[80px] md:px-6 md:py-8 lg:px-10 lg:pb-8 xl:px-10"
         style={{ backgroundColor: 'var(--bg)' }}
       >
         <div className="page-content">
