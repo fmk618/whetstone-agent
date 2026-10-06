@@ -14,7 +14,7 @@ from . import deps
 from ..config import settings
 from ..ingest.chunker import chunk_markdown
 from ..ingest.loaders import ParseError, is_likely_scanned, load_file
-from ..ingest.profile import default_sensitivity, detect_sensitivities
+from ..ingest.profile import default_sensitivity, detect_sensitivities, extract_profile
 from ..llm.router import Router
 from ..retrieval.store import VectorStore
 
@@ -75,6 +75,60 @@ def _delete_doc_vectors(store: VectorStore, doc_id: str) -> None:
 
 def _collection_for(doc_type: str) -> str:
     return "reference" if doc_type == "reference" else "personal"
+
+
+_PROFILE_DOC_TYPES = {"resume", "project", "notes"}
+
+
+async def _extract_profile_for_doc(db: Database, rt: Router, doc_id: str, *, confirm_cloud: bool) -> dict:
+    row = db.one("SELECT * FROM documents WHERE id=?", (doc_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if row["doc_type"] not in _PROFILE_DOC_TYPES:
+        return {"doc_id": doc_id, "competencies": 0, "claims": 0, "skipped": True}
+
+    raw = _raw_file_for(db, doc_id)
+    if raw is None:
+        raise ValueError("找不到文档原文件,请重新上传")
+    text = load_file(str(raw), suffix=raw.suffix.lstrip("."))
+    hits = json.loads(row["sens_hits"] or "{}")
+    decision = rt.route(
+        "extract",
+        sens_confirmed=confirm_cloud,
+        sens_markers=list(hits),
+    )
+    provider = rt.registry.get(decision.provider_id)
+    if provider is None:
+        raise ValueError(f"路由指向的厂商不存在: {decision.provider_id}")
+    result = await extract_profile(provider, decision.model, text, file=row["filename"])
+
+    db.exec("DELETE FROM profile_claims WHERE doc_id=?", (doc_id,))
+    claim_count = 0
+    for competency in result.competencies:
+        for claim in competency.claims:
+            source = claim.source or {}
+            db.exec(
+                """INSERT INTO profile_claims
+                   (doc_id, competency, ctype, domain, claim_text, strength, source_file, source_section)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    doc_id,
+                    competency.competency,
+                    competency.type,
+                    competency.domain,
+                    claim.text,
+                    claim.evidence_strength,
+                    source.get("file") or row["filename"],
+                    source.get("section"),
+                ),
+            )
+            claim_count += 1
+    return {
+        "doc_id": doc_id,
+        "competencies": len(result.competencies),
+        "claims": claim_count,
+        "skipped": False,
+    }
 
 
 def _doc_row(row) -> dict:
@@ -264,6 +318,18 @@ async def reindex(confirm_cloud: bool = False) -> dict:
         )
         total += len(chunks)
     return {"rebuilt": rebuilt, "docs": len(prepared), "n_chunks": total}
+
+
+@router.post("/{doc_id}/profile/extract")
+async def extract_document_profile(doc_id: str, confirm_cloud: bool = False) -> dict:
+    """从已入库的简历、项目或笔记中提取能力声明。"""
+    db = deps.get_db()
+    return await _extract_profile_for_doc(
+        db,
+        get_router(),
+        doc_id,
+        confirm_cloud=confirm_cloud,
+    )
 
 
 @router.get("/{doc_id}/profile")
