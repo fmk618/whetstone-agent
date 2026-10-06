@@ -9,16 +9,29 @@
 
 项目面向希望掌控个人资料与模型服务商选择的求职者、学习者和个人开发者。它不是通用的公开面试平台，也不要求把所有资料上传到同一个云端服务。
 
-## 解决什么问题
+## 核心问题：让面试训练真正理解你
 
-准备面试时，资料通常分散在简历、项目复盘、学习笔记和参考资料中，常见问题包括：
+大多数面试工具只能给出一组通用问题；它们不知道你做过什么、为什么这样做，也无法把一次作答转化为下一次训练。Whetstone 解决的不是“再提供一个聊天窗口”，而是把**个人经历、岗位要求和训练反馈**组织成一套可追溯、可复用的练习系统。
 
-- 面试题与个人经历脱节，无法追溯题目依据；
-- 资料有个人联系方式等敏感内容，却难以判断哪些内容会发送到云端；
-- 不同模型服务商的接口、模型名和能力差异导致切换成本高；
-- 作答后的反馈没有沉淀为下一轮复习计划。
+### 1. 通用题很多，但没有针对你的证据
 
-Whetstone 通过本地文档库、混合检索、可配置的 LLM 角色路由和评分后的复习队列，处理上述链路中的资料组织、证据检索和练习闭环。当前更适合**单机个人使用和功能验证**，不包含多用户、账号体系或生产级公网部署能力。
+简历、项目复盘和学习笔记里包含了真正能体现能力的细节：背景、取舍、指标、结果和个人贡献。Whetstone 从这些资料中检索依据，再围绕目标岗位生成问题，让每道题都能回答两个问题：**为什么问你，以及依据来自哪里。**
+
+### 2. 资料很多，但没有形成个人知识资产
+
+资料散落在多个文件里，过去只能靠人工翻找。Whetstone 将文档解析、切块、建立索引，并保留文件和章节出处，让个人经历从“静态附件”变成可以持续检索和复用的知识资产。
+
+### 3. 练习完成了，但能力没有持续提升
+
+一次回答结束后，真正重要的是知道哪里薄弱、漏掉了什么，以及什么时候再次练习。Whetstone 会保存作答和评分反馈，按结果生成复习队列，把“出题 → 作答 → 反馈 → 复习”连成闭环。
+
+### 4. AI 很方便，但个人资料不能失去控制
+
+简历和项目材料可能包含联系方式、业务细节等敏感内容。Whetstone 默认优先本地处理，识别到敏感信息时限制云端发送；如果确实需要使用云端模型，会先明确请求用户确认。模型服务商也可以按角色切换，不被单一平台绑定。
+
+**一句话总结：**Whetstone 把你的资料变成证据，把证据变成训练，把训练结果变成下一轮复习，同时让数据和模型选择保持在你的控制范围内。
+
+当前项目更适合**个人在本机使用和验证功能**，不包含多用户、账号体系或生产级公网部署能力。
 
 ## 核心能力
 
@@ -127,31 +140,6 @@ uv run --python 3.11 python -m scripts.p0_check path/to/notes.md
 
 检测到敏感信息时，命令行会在发送云端前要求确认；疑似扫描 PDF 会提示当前版本没有 OCR。
 
-## 配置、隐私与安全
-
-### 服务商与角色路由
-
-- `backend/config/providers.yaml` 保存服务商 ID、兼容接口地址和 Key 对应的环境变量名；默认预置千问、豆包、Kimi、DeepSeek、Ollama，并提供 Qianfan、LM Studio 等预设地址。
-- `backend/config/settings.yaml` 的 `routing` 段配置角色与模型，例如：
-
-  ```yaml
-  routing:
-    generate: { provider: qwen, model: qwen-plus }
-    evaluate: { provider: ollama, model: your-local-model }
-    embed: { provider: qwen, model: your-embedding-model }
-  ```
-
-- 模型名称不写死在代码中。也可以通过设置页对应的 API 修改服务商和角色路由。
-- `.env.development`、`.env.production` 等文件只在本机加载，并已被 `.gitignore` 排除。可用变量包括 `DASHSCOPE_API_KEY`、`ARK_API_KEY`、`MOONSHOT_API_KEY` 和 `DEEPSEEK_API_KEY`。
-
-### 默认的数据与隐私策略
-
-- 默认监听 `127.0.0.1:8000`，运行时数据库、原始文件和 ChromaDB 位于项目根目录的 `data/`，该目录不提交到 Git。
-- 上传内容会按 `backend/config/settings.yaml` 中的规则检测手机号、邮箱、身份证号和银行卡号。命中后默认标记 `local_only`；发送到云端需要通过 `confirm_cloud=true` 完成知情确认。
-- Key 只从环境变量或本机配置读取；设置接口只返回“已设置/未设置”，不会把明文 Key 返回给前端。
-- 若要公网部署，必须自行配置 HTTPS、反向代理和访问认证，并将 Key 放在服务端环境变量或安全的密钥管理系统中；当前项目默认配置不是多用户生产部署方案。
-- 本项目不保证第三方模型服务商的留存、训练或跨境策略。使用云端服务前，请自行阅读对应服务商的隐私条款。
-
 ## 项目结构
 
 ```text
@@ -186,33 +174,6 @@ whetstone-agent/
 ├── data/                         # 运行时数据，已被 gitignore 排除
 └── LICENSE                       # Apache License 2.0
 ```
-
-## 开发与测试
-
-后端测试使用 pytest 和 pytest-asyncio，测试通过夹具替换 LLM/嵌入服务，不需要真实 API Key：
-
-```bash
-cd backend
-uv sync
-uv run --python 3.11 pytest -q
-```
-
-常用的定向测试：
-
-```bash
-uv run --python 3.11 pytest tests/test_api_quiz_flow.py -q
-uv run --python 3.11 pytest tests/test_generator.py tests/test_ingest.py -q
-```
-
-前端类型检查和生产构建：
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-`npm run build` 会先执行 `tsc --noEmit`，再运行 Vite 构建。开发时可使用 `npm run dev`，构建产物可使用 `npm run preview` 预览。
 
 ## 许可证
 

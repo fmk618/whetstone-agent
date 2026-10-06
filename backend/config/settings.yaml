@@ -1,9 +1,9 @@
 # 角色路由与检索参数。模型名一律可配置,不写死;示例条目需在设置页填入真实模型名。
 routing:
-  extract:   { provider: qwen, model: "qwen-plus" }            # 简历/项目抽取
-  generate:  { provider: qwen, model: "qwen-plus" }            # 出题
-  evaluate:  { provider: qwen, model: "qwen-plus" }            # 评分
-  interview: { provider: qwen, model: "qwen-plus" }            # 模拟面试追问
+  extract:   { provider: qwen, model: "qwen3.8-flash" }            # 简历/项目抽取
+  generate:  { provider: qwen, model: "qwen3.8-flash" }            # 出题
+  evaluate:  { provider: qwen, model: "qwen3.8-flash" }            # 评分
+  interview: { provider: qwen, model: "qwen3.8-flash" }            # 模拟面试追问
   embed:     { provider: qwen, model: "qwen3.7-text-embedding-flash" }  # 维度以文档为准(默认 1024)
 
 chunk:
