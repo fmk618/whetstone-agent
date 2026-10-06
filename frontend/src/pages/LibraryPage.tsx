@@ -5,6 +5,7 @@ import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 import type {
   DocType,
   DocTypeLoose,
@@ -137,24 +138,17 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
     <section className="card card-raised mb-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-base font-semibold">上传文档</h2>
-        <span className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          支持 PDF / Word / Markdown · 单个文件不超过 20 MB
-        </span>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 pb-2">
-        <label className="min-w-[140px]" htmlFor="library-doc-type">
+        <label className="min-w-[140px]">
           <span className="field-label mb-1 block">文档类型</span>
-          <select
-            id="library-doc-type"
-            className="input"
+          <Select
             value={docType}
-            onChange={(e) => setDocType(e.target.value as DocType)}
-          >
-            {DOC_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            onChange={(v) => setDocType(v as DocType)}
+            options={DOC_TYPE_OPTIONS}
+            ariaLabel="文档类型"
+          />
         </label>
       </div>
 
@@ -193,9 +187,7 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5" />
             </svg>
-            <div className="text-sm font-medium">
-              上传中…(切片 → 嵌入 → 入库,大文件可能需几秒到十几秒)
-            </div>
+            <div className="text-sm font-medium">上传中…</div>
           </div>
         ) : (
           <>
@@ -217,7 +209,7 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
               {picked ? `已选择:${picked.name}(${formatBytes(picked.size)})` : '拖拽文件到此处,或点击选择'}
             </div>
             <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
-              {picked ? '点击下方「开始上传」确认' : '支持 .md / .txt / .pdf / .docx'}
+              {picked ? '点击下方「开始上传」确认' : 'PDF / Word / Markdown · 不超过 20 MB'}
             </div>
           </>
         )}
@@ -237,10 +229,6 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
           开始上传
         </button>
       ) : null}
-
-      <p className="mt-3 text-xs leading-relaxed" style={{ color: 'var(--fg-subtle)' }}>
-        上传前请确认文件中不含身份证号、真实手机号等隐私信息;标记为「仅本机」的内容永远不会离开这台电脑。
-      </p>
     </section>
   )
 }
@@ -511,9 +499,6 @@ function DocTable({
       </div>
       <DocCards />
       <DocTableDesktop />
-      <p className="mt-4 text-xs leading-relaxed" style={{ color: 'var(--fg-subtle)' }}>
-        切片(block)由后端入库时自动计算;「重建索引」会在文档内容变更后重新向量化。
-      </p>
     </section>
   )
 }
@@ -530,7 +515,6 @@ export default function LibraryPage() {
       {toast}
       <PageHeader
         title="资料库"
-        description="上传简历、JD、面经与学习资料,构建个人知识底座"
         actions={
           <button
             type="button"

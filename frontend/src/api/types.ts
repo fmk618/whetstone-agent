@@ -119,34 +119,56 @@ export interface QuizQuestion {
 /** 列表/详情页可直接用 Question 别名 */
 export type Question = QuizQuestion
 
-/** POST /api/quiz/sessions/{id}/questions 请求体(契约以 routes_quiz.QuestionsIn 为准) */
+/** POST /api/quiz/sessions/{id}/questions 请求体(契约以 routes_quiz.QuestionsIn 为准;
+ * confirm_cloud 放 JSON body,不是 query) */
 export interface QuestionsIn {
   layer: 'core' | 'resume' | 'domain'
+  /** 行业包;layer=core 时后端固定用 _core */
+  pack_id?: string | null
+  /** 旧字段名兼容(pack_id 别名),新代码请用 pack_id */
   pack?: string | null
-  /** 各能力项的题数 {"task": 2, ...},总和才是本次想生成的总题数 */
-  counts?: Record<string, number> | null
+  /** 本次生成总题数,1-30,后端默认 8 */
+  total?: number
+  /** 岗位描述原文;domain/resume 有 JD 则据此加权 */
+  jd?: string | null
+  /** 知情确认:允许 local_only 原文发给云端 */
+  confirm_cloud?: boolean
 }
 
-/** POST /api/quiz/questions/{qid}/answer 请求体 */
+/** 生成题目响应(routes_quiz.create_questions):不再是平铺数组 */
+export interface QuestionsOut {
+  session_id: number
+  layer: QuestionsIn['layer']
+  pack: string
+  generated: number
+  questions: QuizQuestion[]
+  /** 生成为 0 时后端附带的解释文案 */
+  message?: string
+}
+
+/** POST /api/quiz/questions/{qid}/answer 请求体(confirm_cloud 在 body) */
 export interface AnswerIn {
   answer_text: string
+  confirm_cloud?: boolean
 }
 
-/** 一次作答的评分结果(answers 表一行) */
+/** 作答评分响应(answers 表一行 + review 排期) */
 export interface AnswerRecord {
-  id: number
+  answer_id: number
   question_id: number
   session_id?: number
-  answer_text: string
+  answer_text?: string
   /** 0-100 */
   score: number | null
   /** {维度名: 分数} */
   dim_scores?: Record<string, number> | null
   feedback?: string | null
   competency?: string | null
-  /** 出题评分的遗漏点列表(esome 版答錯/缺失要点,评分 Evaluator 返回) */
+  /** 出题评分的遗漏点列表(评分 Evaluator 返回) */
   missed_points?: string[] | null
   created_at?: string | null
+  /** 复习排期(score 决定间隔天数) */
+  review?: { due_days: number[]; done: boolean } | null
 }
 
 /* ---------- 设置 /settings ---------- */

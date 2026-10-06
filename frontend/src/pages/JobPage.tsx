@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { WipPlaceholder } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 
 /* -----
  * 占位数据,结构对齐后端方案 7.2:
@@ -78,10 +79,7 @@ function JdEditor() {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <section className="card">
-        <h2 className="mb-1 text-base font-semibold">岗位描述</h2>
-        <p className="mb-3 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-          粘贴完整 JD 原文,解析结果会与资料库、能力矩阵联动
-        </p>
+        <h2 className="mb-3 text-base font-semibold">岗位描述</h2>
 
         <label className="sr-only" htmlFor="jd-text">
           岗位描述原文
@@ -110,24 +108,13 @@ function JdEditor() {
         {parsed ? (
           <div className="flex flex-1 flex-col gap-4">
             <div>
-              <label className="field-label mb-1.5" htmlFor="standard-name">
-                标准职业名
-              </label>
-              <select
-                id="standard-name"
-                className="input"
+              <span className="field-label mb-1.5 block">标准职业名</span>
+              <Select
                 value={standard}
-                onChange={(e) => setStandard(e.target.value)}
-              >
-                {MATCH.candidates.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-                来自同义词归一,可手动更正;行业包将随时联动。
-              </p>
+                onChange={setStandard}
+                options={MATCH.candidates.map((name) => ({ value: name, label: name }))}
+                ariaLabel="标准职业名"
+              />
             </div>
 
             <div className="rounded-lg px-3.5 py-3" style={{ backgroundColor: 'var(--bg-inset)' }}>
@@ -151,9 +138,6 @@ function JdEditor() {
                   style={{ width: `${pct}%`, backgroundColor: 'var(--accent)' }}
                 />
               </div>
-              <p className="mt-2 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-                该岗位将采用行业包「{MATCH.industry_pack}」出题。
-              </p>
             </div>
 
             <WipPlaceholder
@@ -188,12 +172,7 @@ function MatrixTable() {
   return (
     <section className="card">
       <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold">
-          能力矩阵
-          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--fg-subtle)' }}>
-            权重 = 行业包权重 × JD 命中频次,决定各能力项的题量
-          </span>
-        </h2>
+        <h2 className="text-base font-semibold">能力矩阵</h2>
         <CategoryLegend />
       </header>
 
@@ -249,10 +228,7 @@ function MatrixTable() {
 export default function JobPage() {
   return (
     <div>
-      <PageHeader
-        title="目标岗位"
-        description="粘贴岗位 JD,归一为标准职业并生成能力矩阵,驱动出题与面试方向"
-      />
+      <PageHeader title="目标岗位" />
       <div className="flex flex-col gap-6 lg:gap-8">
         <JdEditor />
         <MatrixTable />

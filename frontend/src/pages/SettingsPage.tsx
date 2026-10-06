@@ -40,7 +40,6 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="设置"
-        description="配置模型 provider 与 local_only / 云端路由策略"
         actions={
           <button className="btn btn-ghost" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? '刷新中…' : '刷新'}

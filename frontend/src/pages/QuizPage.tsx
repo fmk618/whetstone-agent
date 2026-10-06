@@ -6,6 +6,7 @@ import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
+import { Select } from '../components/Select'
 import type {
   AnswerIn,
   AnswerRecord,
@@ -13,6 +14,7 @@ import type {
   Provenance,
   Question,
   QuestionsIn,
+  QuestionsOut,
   QuizSession,
 } from '../api/types'
 
@@ -144,8 +146,9 @@ function AnswerPanel({ question, onToast }: { question: Question; onToast: (text
     mutationFn: async () => {
       const body: AnswerIn = { answer_text: text }
       const send = (opts: { confirmCloud: boolean }) =>
-        post<AnswerRecord>(`/api/quiz/questions/${question.id}/answer`, body, {
-          query: { confirm_cloud: opts.confirmCloud },
+        post<AnswerRecord>(`/api/quiz/questions/${question.id}/answer`, {
+          ...body,
+          confirm_cloud: opts.confirmCloud,
         })
       try {
         return await send({ confirmCloud: false })
@@ -225,12 +228,15 @@ function AnswerPanel({ question, onToast }: { question: Question; onToast: (text
           <label className="field-label mb-1 block" htmlFor={`q-${question.id}-answer`}>
             作答(对照后端 evaluate 角色评分)
           </label>
+          <label className="field-label mb-1" htmlFor={`q-${question.id}-answer`}>
+            作答
+          </label>
           <textarea
             id={`q-${question.id}-answer`}
             className="input w-full"
             rows={4}
             value={text}
-            placeholder="用自己的话作答。点击「提交评分」后,这段话会发给本地/绑定的云端模型按维度打分。"
+            placeholder="用自己的话作答,提交后按维度评分"
             onChange={(e) => {
               setText(e.target.value)
               setTouched(true)
@@ -389,26 +395,37 @@ function GenerateToolbar({
         })
         sessionId = studio.id
       }
-      // 2. 出题:契约以 routes_quiz.QuestionsIn 为准 {layer, pack, counts};
-      //    出 1 道题时 counts 给 {"task": total}? 事实上 counts key 是"能力项名",
-      //    用户还没有抽取能力名,这里传 {"task": total} 后端按能力项名检索挖题。
-      //    等 generator 接入后,再按实际返回调整。
-      const body: QuestionsIn = { layer, pack, counts: { task: total } }
+      // 2. 出题:契约以 routes_quiz.QuestionsIn 为准 {layer, pack_id, total,
+      //    confirm_cloud}(confirm_cloud 在 JSON body,不是 query)。
+      const body: QuestionsIn = {
+        layer,
+        pack_id: layer === 'core' ? undefined : pack,
+        total,
+      }
       const send = (o: { confirmCloud: boolean }) =>
-        post<Question[]>(`/api/quiz/sessions/${sessionId}/questions`, body, {
-          query: { confirm_cloud: o.confirmCloud },
+        post<QuestionsOut>(`/api/quiz/sessions/${sessionId}/questions`, {
+          ...body,
+          confirm_cloud: o.confirmCloud,
         })
       try {
-        return { sessionId, questions: await send({ confirmCloud: false }) }
+        return { sessionId, out: await send({ confirmCloud: false }) }
       } catch (err) {
-        const questions = await requestWithCloudConfirm(send, err)
-        return { sessionId, questions }
+        const out = await requestWithCloudConfirm(send, err)
+        return { sessionId, out }
       }
     },
-    onSuccess: ({ questions }) => {
+    onSuccess: ({ out, sessionId }) => {
       queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'latest-session'] })
       setFormError(null)
-      onToast(`生成完成:${questions.length} 题(会话已保留,可继续在复习看板跟进)`, 'success')
+      // 生成为 0 时后端附 message 解释(如检索不到资料片段)
+      if (out.message) onToast(out.message, 'info')
+      else onToast(`生成完成:${out.generated} 题(会话 ${sessionId} 已保留)`, 'success')
+      // 本轮可能落在旧会话上;立即把详情拉到最新
+      void queryClient.fetchQuery({
+        queryKey: ['quiz', 'latest-session'],
+        queryFn: async () => await get<QuizSession>(`/api/quiz/sessions/${sessionId}`),
+      })
     },
     onError: (err) => {
       setFormError(detailOf(err, '生成失败,请稍后重试'))
@@ -431,61 +448,53 @@ function GenerateToolbar({
       <h2 className="mb-3 text-base font-semibold">生成题目</h2>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[150px]">
-          <label className="field-label mb-1" htmlFor="quiz-layer">
-            层级(出题范围)
-          </label>
-          <select
-            id="quiz-layer"
-            className="input"
+          <span className="field-label mb-1 block" id="quiz-layer-label">层级(出题范围)</span>
+          <Select
             value={layer}
-            onChange={(e) => setLayer(e.target.value as Layer)}
-          >
-            <option value="core">基础(通用能力)</option>
-            <option value="resume">项目(简历深挖)</option>
-            <option value="domain">领域(知识点)</option>
-          </select>
+            onChange={(v) => setLayer(v as Layer)}
+            options={[
+              { value: 'core', label: '基础(通用能力)' },
+              { value: 'resume', label: '项目(简历深挖)' },
+              { value: 'domain', label: '领域(知识点)' },
+            ]}
+            ariaLabel="层级(出题范围)"
+          />
         </div>
 
         <div className="min-w-[160px]">
-          <label className="field-label mb-1" htmlFor="quiz-pack">
-            行业包
-          </label>
-          <select id="quiz-pack" className="input" value={pack} onChange={(e) => setPack(e.target.value)}>
-            {PACK_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <span className="field-label mb-1 block">行业包</span>
+          <Select
+            value={pack}
+            onChange={setPack}
+            options={PACK_OPTIONS}
+            ariaLabel="行业包"
+          />
         </div>
 
         <div className="min-w-[110px]">
-          <label className="field-label mb-1" htmlFor="quiz-total">
-            题目数量
-          </label>
-          <select
-            id="quiz-total"
-            className="input"
+          <span className="field-label mb-1 block">题目数量</span>
+          <Select
             value={String(total)}
-            onChange={(e) => setTotal(Number(e.target.value))}
-          >
-            <option value="1">1 题</option>
-            <option value="3">3 题</option>
-            <option value="5">5 题</option>
-            <option value="10">10 题</option>
-          </select>
+            onChange={(v) => setTotal(Number(v))}
+            options={[
+              { value: '1', label: '1 题' },
+              { value: '3', label: '3 题' },
+              { value: '5', label: '5 题' },
+              { value: '10', label: '10 题' },
+            ]}
+            ariaLabel="题目数量"
+          />
         </div>
 
         <button
           type="button"
-          className="btn btn-primary h-[32px]"
+          className="btn btn-primary"
           disabled={!submittable}
           onClick={submit}
         >
           {generateMutation.isPending ? '生成中…(检索+LLM 出题)' : '生成题目'}
         </button>
       </div>
-      <p className="mt-2.5 text-xs" style={{ color: 'var(--fg-subtle)' }}>
-        出题仅使用标记为「仅本机」的模型时,资料内容不会离开本机;每道题都会附上来源片段,便于回查原文。
-      </p>
 
       {formError ? (
         <div className="mt-3">
@@ -543,9 +552,6 @@ function EmptyQuestionList() {
         <path d="m17.5 14.5 3-3M20.5 11.5l1.5 1.5-3.5 3.5-2 .5.5-2Z" />
       </svg>
       <h2 className="mt-3 text-base font-semibold">还没有生成过题目</h2>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed" style={{ color: 'var(--fg-muted)' }}>
-        选好层级和行业包,点击「生成题目」开始。题目会基于已上传的资料生成,每道题带出处,便于回查。
-      </p>
       <p className="mt-2 text-xs" style={{ color: 'var(--fg-subtle)' }}>
         没资料?先到 <Link to="/" className="underline" style={{ color: 'var(--accent)' }}>资料库</Link> 上传一份简历或笔记。
       </p>
@@ -578,7 +584,6 @@ export default function QuizPage() {
       {toast}
       <PageHeader
         title="出题练习"
-        description="基于资料库与目标岗位生成练习题并作答"
         actions={
           <span className="tnum text-xs" style={{ color: 'var(--fg-subtle)' }}>
             资料库 {docCount} 份 · 已答 {detailQuery.data?.questions?.filter((q) => (q.answers?.length ?? 0) > 0).length ?? 0} 题
