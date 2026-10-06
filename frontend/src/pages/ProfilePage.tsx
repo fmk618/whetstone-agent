@@ -118,7 +118,7 @@ function SummaryStrip({
         {
           label: '弱证据能力',
           parsed: weakCompetencyCount,
-          hint: '面试时会被验证,优先复习',
+          hint: `${docCount} 份文档 · 优先复习`,
           warn: weakCompetencyCount > 0,
         },
       ].map((cell, i) => (
@@ -221,7 +221,6 @@ export default function ProfilePage() {
     <div>
       <PageHeader
         title="知识档案"
-        description="能力项由资料库提取整理而来,每条声明都可回溯到原文出处"
         actions={
           <button className="btn btn-ghost" onClick={() => docsQuery.refetch()} disabled={docsQuery.isFetching || profileQueries.some((q) => q.isFetching)}>
             {docsQuery.isFetching ? '刷新中…' : '重新提取档案'}

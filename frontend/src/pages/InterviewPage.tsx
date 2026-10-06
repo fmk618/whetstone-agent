@@ -106,7 +106,6 @@ export default function InterviewPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="模拟面试"
-        description="多轮追问式面试对话,结束后按评分维度生成总结报告"
         actions={
           <>
             <span

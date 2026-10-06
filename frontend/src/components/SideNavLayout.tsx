@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState, type ReactNode, type SVGProps } from 'react'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { CloudConfirmDialog } from './CloudConfirmDialog'
 
 /** 统一 1.5 描边线性图标(与整体「锻铁」线条语言一致)。装订线内 24px 视觉尺寸 */
@@ -137,75 +137,37 @@ const NAV_ITEMS: NavItem[] = [
 const RAIL_ITEMS = NAV_ITEMS.filter((i) => i.to !== '/settings')
 const SETTINGS_ITEM = NAV_ITEMS[NAV_ITEMS.length - 1]
 
-const NAV_EXPANDED_KEY = 'whetstone.nav-expanded'
-
-function readPinnedExpanded(): boolean {
-  try {
-    return window.localStorage.getItem(NAV_EXPANDED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-/** 收/展切换按钮:chevron 双箭头(朝左收起 / 朝右展开) */
-function ToggleChevrons({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={`shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
-    >
-      <path d="M14.5 6 9.5 12l5 6" />
-      <path d="M19 6l-5 6 5 6" opacity="0.45" />
-    </svg>
-  )
-}
-
 /**
- * 装订线导航项。收起态:36×36 热区 + 24px 图标 + 右侧浮出 .rail-tip;
- * 展开态:图标 + 文字标签,hover inset 淡染,active 图标 accent + 文字加重。
- * active 铅笔勾:左侧 4×20px 短竖线悬出右缘。
+ * 装订线导航项 —— 单点 morph:
+ * 静置恒为 36×36 纯图标(装订线 64/56px 不变);胶囊态(当前页长显,
+ * 或点击其它项迁移过去)图标不动、右侧文字从旁边淡入,宽度由文字撑开。
+ * 再点已展开项收回到纯图标。hover 只做变色轻反馈。
  */
-function RailItem({ item, expanded }: { item: NavItem; expanded: boolean }) {
+function RailItem({
+  item,
+  expanded,
+  onExpand,
+}: {
+  item: NavItem
+  expanded: boolean
+  onExpand: (to: string) => void
+}) {
   return (
     <NavLink
       to={item.to}
       end={item.to === '/'}
       aria-label={item.label}
       className={({ isActive }) =>
-        `relative flex h-9 w-9 items-center justify-center overflow-visible rounded-[4px] transition-colors duration-[120ms] ${
-          expanded ? 'h-9 w-[172px] justify-start px-[6px] hover:bg-[color:var(--accent-wash)]' : ''
-        } ${isActive ? 'is-active text-[color:var(--accent)]' : 'text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]'}`
+        `rail-item ${expanded ? 'rail-item-open' : ''} ${
+          isActive ? 'is-active text-[color:var(--accent)]' : 'text-[color:var(--fg-subtle)] hover:text-[color:var(--fg)]'
+        }`
       }
+      onClick={() => onExpand(item.to)}
     >
-      {({ isActive }) => (
+      {() => (
         <>
-          {isActive && (
-            <span
-              aria-hidden="true"
-              className="absolute top-1/2 h-[20px] w-[4px] -translate-y-1/2 rounded-r"
-              style={{ left: 'calc(100% + 6px)', backgroundColor: 'var(--accent)' }}
-            />
-          )}
-          {item.icon}
-          <span
-            className={`dock-label ml-[10px] whitespace-nowrap text-[color:var(--fg)] transition-opacity duration-[180ms] ${
-              expanded
-                ? 'opacity-100 font-semibold'
-                : 'pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0'
-            }`}
-            style={expanded ? { fontWeight: isActive ? 600 : 500 } : undefined}
-          >
-            {item.label}
-          </span>
-          {!expanded && <span className="rail-tip">{item.label}</span>}
+          <span className="grid h-9 w-9 shrink-0 place-items-center">{item.icon}</span>
+          <span className="rail-pill-label">{item.label}</span>
         </>
       )}
     </NavLink>
@@ -244,43 +206,23 @@ function DockItem({ item }: { item: NavItem }) {
 
 /**
  * 「一页书」布局:
- * 桌面 ≥md 可展开装订线 —— 收起 64px(lg)/ 56px(md),hover(150ms 去抖)或点击
- * 切换按钮展开为 208px 文字导航;pinned 存 localStorage('whetstone.nav-expanded')。
+ * 桌面 ≥md 装订线恒 64px(lg)/ 56px(md),导航项静置 36×36 纯图标;
+ * 当前页默认长显图标+文字胶囊;点击其它项胶囊即时迁移(200ms morph),
+ * 再点已展开项收回纯图标。整条侧栏不再有 208px 展开档位。
  * 手机 <md 为 52px 底部 dock(上缘 0.5px 墨线),图标 + 10.5px 文字标签。
  */
 export function SideNavLayout() {
-  const [pinned, setPinned] = useState<boolean>(() => readPinnedExpanded())
-  const [hovering, setHovering] = useState(false)
-  const hoverTimer = useRef<number | null>(null)
+  // 当前长显胶囊的导航项:跟随路由(品牌印 / 程序内跳转也会带动)
+  const [openTo, setOpenTo] = useState('')
+  const { pathname } = useLocation()
 
-  // pinned 变化落盘(try/catch,隐私模式兜底)
   useEffect(() => {
-    try {
-      window.localStorage.setItem(NAV_EXPANDED_KEY, pinned ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [pinned])
+    setOpenTo(pathname)
+  }, [pathname])
 
-  useEffect(
-    () => () => {
-      if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-    },
-    [],
-  )
-
-  const expanded = pinned || hovering
-
-  const onEnter = () => {
-    if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
-    hoverTimer.current = window.setTimeout(() => setHovering(true), 150)
-  }
-  const onLeave = () => {
-    if (hoverTimer.current !== null) {
-      window.clearTimeout(hoverTimer.current)
-      hoverTimer.current = null
-    }
-    setHovering(false)
+  /** 点已展开项收回;点其它项则胶囊迁移过去 */
+  const handleExpand = (to: string) => {
+    setOpenTo((prev) => (prev === to ? '' : to))
   }
 
   return (
@@ -288,72 +230,40 @@ export function SideNavLayout() {
       className="flex h-full min-h-0"
       style={{ backgroundColor: 'var(--bg)', color: 'var(--fg)' }}
     >
-      {/* 装订线:与纸同底,无右边框;收起仅图标,hover/pinned 展开为文字导航 */}
+      {/* 装订线:与纸同底、无右边框;宽度恒定,仅单项位置 morph 出文字胶囊 */}
       <aside
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        className="hidden shrink-0 flex-col pb-4 pt-5 md:flex"
-        style={{
-          width: expanded ? 208 : undefined,
-          transition: 'width 200ms ease',
-        }}
+        className="hidden w-14 shrink-0 flex-col pb-4 pt-5 md:flex lg:w-16"
         aria-label="主导航"
-        aria-expanded={expanded}
       >
-        {/* 收起档位宽度:md 56px / lg 64px */}
-        <div
-          className={expanded ? 'w-[208px]' : 'w-14 md:w-14 lg:w-16'}
-          style={{ width: expanded ? 208 : undefined }}
-        >
-          <div className="flex min-w-0 flex-col" style={{ width: '100%' }}>
-            {/* 品牌印:收起仅 Mark;展开 Mark + 「磨刀石」 */}
-            <div className="flex items-center px-[6px]">
-              <NavLink
-                to="/"
-                aria-label="磨刀石 · 资料库"
-                className="grid h-9 w-9 shrink-0 place-items-center"
-              >
-                <WhetstoneMark size={24} />
-              </NavLink>
-              <span
-                className={`serif-title ml-[6px] whitespace-nowrap text-[14px] transition-opacity duration-[180ms] ${
-                  expanded ? 'opacity-100' : 'pointer-events-none opacity-0'
-                }`}
-              >
-                磨刀石
-              </span>
-            </div>
+        {/* 品牌印:仅 Mark,不参与 morph */}
+        <div className="flex items-center px-[6px]">
+          <NavLink
+            to="/"
+            aria-label="磨刀石 · 资料库"
+            className="grid h-9 w-9 shrink-0 place-items-center"
+          >
+            <WhetstoneMark size={24} />
+          </NavLink>
+        </div>
 
-            <nav
-              className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[10px]"
-              aria-label="主导航链接"
-            >
-              {RAIL_ITEMS.map((item) => (
-                <RailItem key={item.to} item={item} expanded={expanded} />
-              ))}
-            </nav>
+        <nav className="mt-5 flex flex-1 flex-col items-start gap-[7px] px-[10px]" aria-label="主导航链接">
+          {RAIL_ITEMS.map((item) => (
+            <RailItem
+              key={item.to}
+              item={item}
+              expanded={openTo === item.to}
+              onExpand={handleExpand}
+            />
+          ))}
+        </nav>
 
-            {/* 底部:设置 + 收/展切换 */}
-            <div className="mt-4 flex flex-col items-start gap-[7px] px-[10px] pb-1">
-              <RailItem item={SETTINGS_ITEM} expanded={expanded} />
-              <button
-                type="button"
-                onClick={() => setPinned((p) => !p)}
-                aria-label={expanded ? '收起导航' : '展开导航'}
-                className="flex h-9 items-center justify-start rounded-[4px] px-[7px] text-[color:var(--fg-subtle)] transition-colors duration-[120ms] hover:text-[color:var(--fg)]"
-                style={{ width: '100%' }}
-              >
-                <ToggleChevrons collapsed={!expanded} />
-                <span
-                  className={`dock-label ml-[12px] whitespace-nowrap transition-opacity duration-[180ms] ${
-                    expanded ? 'opacity-100' : 'pointer-events-none opacity-0'
-                  }`}
-                >
-                  收起导航
-                </span>
-              </button>
-            </div>
-          </div>
+        {/* 底部设置项:与上面 6 项同模式 */}
+        <div className="mt-4 flex flex-col items-start gap-[7px] px-[10px] pb-1">
+          <RailItem
+            item={SETTINGS_ITEM}
+            expanded={openTo === SETTINGS_ITEM.to}
+            onExpand={handleExpand}
+          />
         </div>
       </aside>
 

@@ -205,10 +205,6 @@ function WeakRank() {
           )
         })}
       </ul>
-
-      <p className="mt-5 border-t pt-3 text-xs leading-relaxed" style={{ borderColor: 'var(--border)', color: 'var(--fg-subtle)' }}>
-        正确率按能力项聚合所有作答;低于 55% 红色、75% 黄色、其余绿色。复习完成后重新计算,队列自动进入下一间隔。
-      </p>
     </section>
   )
 }
@@ -216,10 +212,7 @@ function WeakRank() {
 export default function ReviewPage() {
   return (
     <div>
-      <PageHeader
-        title="复习看板"
-        description="按能力项记录正确率,低分题自动进入间隔复习队列"
-      />
+      <PageHeader title="复习看板" />
       <StatCards />
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <QueueList />
