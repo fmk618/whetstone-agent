@@ -66,10 +66,26 @@ def test_load_md(tmp_path):
     assert load_file(str(f)).startswith("# 笔记")
 
 
+def test_load_docx(tmp_path):
+    from docx import Document
+
+    f = tmp_path / "resume.docx"
+    document = Document()
+    document.add_paragraph("资深后端开发工程师")
+    table = document.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "技能"
+    table.cell(0, 1).text = "Python"
+    document.save(f)
+
+    text = load_file(str(f))
+    assert "资深后端开发工程师" in text
+    assert "技能 | Python" in text
+
+
 def test_load_unsupported(tmp_path):
-    f = tmp_path / "x.docx"
+    f = tmp_path / "x.rtf"
     f.write_text("x", encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="不支持的文件类型"):
         load_file(str(f))
 
 

@@ -117,7 +117,6 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
       const body = (err as { body?: { detail?: string } }).body
       if (body?.detail) detail = body.detail
       setUploadMsg({ ok: false, text: detail || text })
-      onToast(detail || text, 'error')
     },
   })
 
@@ -179,7 +178,7 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
           ref={fileRef}
           type="file"
           hidden
-          accept=".md,.txt,.pdf,.docx,.doc"
+          accept=".md,.txt,.pdf,.docx"
           onChange={pickFile}
         />
         {uploadMutation.isPending ? (
@@ -209,19 +208,21 @@ function UploadZone({ onToast }: { onToast: (text: string, kind?: 'success' | 'e
               {picked ? `已选择:${picked.name}(${formatBytes(picked.size)})` : '拖拽文件到此处,或点击选择'}
             </div>
             <div className="text-xs" style={{ color: 'var(--fg-subtle)' }}>
-              {picked ? '点击下方「开始上传」确认' : 'PDF / Word / Markdown · 不超过 20 MB'}
+              {picked ? '点击下方「开始上传」确认' : 'PDF / Word (.docx) / Markdown · 不超过 20 MB'}
             </div>
           </>
         )}
       </div>
 
       {uploadMsg ? (
-        <p
-          className="mt-2 text-xs leading-relaxed"
-          style={{ color: uploadMsg.ok ? 'var(--success)' : 'var(--danger)' }}
+        <div
+          className={`upload-message ${uploadMsg.ok ? 'is-success' : 'is-error'}`}
+          role={uploadMsg.ok ? 'status' : 'alert'}
+          aria-live="polite"
         >
-          {uploadMsg.text}
-        </p>
+          <strong>{uploadMsg.ok ? '上传成功' : '上传失败'}</strong>
+          <span>{uploadMsg.text}</span>
+        </div>
       ) : null}
 
       {picked && !uploadMutation.isPending ? (

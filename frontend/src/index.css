@@ -549,6 +549,36 @@ select.input {
   outline: none;
 }
 
+.upload-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.upload-message strong {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.upload-message.is-success {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+
+.upload-message.is-error {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
 /* ---------- 可折叠说明条(隐私提示等) ---------- */
 
 .privacy-note {
