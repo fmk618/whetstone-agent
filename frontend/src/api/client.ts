@@ -28,6 +28,9 @@ interface RequestOptions {
   signal?: AbortSignal
 }
 
+/** JSON 请求体的宽松形状(interface 默认不带索引签名,这里转一次) */
+type JsonBody = object
+
 function buildUrl(path: string, query?: RequestOptions['query']): string {
   if (!query) return path
   const params = new URLSearchParams()
@@ -57,7 +60,7 @@ async function parseResponse<T>(res: Response): Promise<T> {
 async function request<T>(
   method: string,
   path: string,
-  options: RequestOptions & { body?: BodyInit | Record<string, unknown> },
+  options: RequestOptions & { body?: BodyInit | JsonBody },
 ): Promise<T> {
   const headers: Record<string, string> = {}
   let body: BodyInit | undefined
@@ -93,7 +96,7 @@ export function get<T>(path: string, options: RequestOptions = {}): Promise<T> {
 /** POST 请求(JSON 或 FormData 自动区分) */
 export function post<T>(
   path: string,
-  body?: BodyInit | Record<string, unknown>,
+  body?: BodyInit | JsonBody,
   options: RequestOptions = {},
 ): Promise<T> {
   return request<T>('POST', path, { ...options, body })
@@ -102,7 +105,7 @@ export function post<T>(
 /** PUT 请求 */
 export function put<T>(
   path: string,
-  body?: BodyInit | Record<string, unknown>,
+  body?: BodyInit | JsonBody,
   options: RequestOptions = {},
 ): Promise<T> {
   return request<T>('PUT', path, { ...options, body })

@@ -20,9 +20,12 @@ def tmp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     # 最小 settings.yaml:routing/privacy 段,routing 读写与敏感检测都要用
+    # generate/evaluate 供出题/评分链路读取(测试会用假 provider 替换)
     (config_dir / "settings.yaml").write_text(
         "routing:\n"
         "  embed: {provider: local-embed, model: bge-m3}\n"
+        "  generate: {provider: local-llm, model: test-model}\n"
+        "  evaluate: {provider: local-llm, model: test-model}\n"
         "privacy:\n"
         "  patterns:\n"
         "    phone: '(?<!\\d)1[3-9]\\d{9}(?!\\d)'\n",
@@ -51,6 +54,15 @@ def tmp_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     real_get_registry.cache_clear()
     reg = registry_mod.Registry(config_dir)
     monkeypatch.setattr(registry_mod, "get_registry", lambda: reg)
+
+    # 行业包:packs_loader 用 config_dir.parent/packs,tmp 环境拷真实包过去
+    packs_dst = tmp_path / "packs"
+    packs_dst.mkdir()
+    for src_pack in (Path(__file__).resolve().parent.parent / "packs").glob("*"):
+        if src_pack.is_dir():
+            import shutil
+            shutil.copytree(src_pack, packs_dst / src_pack.name)
+
     yield db
     # monkeypatch 撤销后,清掉 lru_cache 里可能缓存的真实 Registry
     real_get_registry.cache_clear()
@@ -145,13 +157,14 @@ async def test_session_cascade_delete(client: AsyncClient, tmp_env):
 
 
 @pytest.mark.asyncio
-async def test_question_generation_placeholder(client: AsyncClient):
+async def test_question_generation_layer_validation(client: AsyncClient):
     r = await client.post("/api/quiz/sessions", json={"kind": "quiz", "title": None})
     sid = r.json()["id"]
+    # 无抽取声明 → 400(提示先上传资料)
     r = await client.post(f"/api/quiz/sessions/{sid}/questions",
-                          json={"layer": "core", "pack": None, "counts": {"task": 2}})
-    assert r.status_code == 501
-    assert "generator" in r.json()["detail"]
+                          json={"layer": "core"})
+    assert r.status_code == 400
+    assert "上传" in r.json()["detail"]
 
     # 参数校验:layer 非法 → 422
     r = await client.post(f"/api/quiz/sessions/{sid}/questions",
@@ -160,15 +173,17 @@ async def test_question_generation_placeholder(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_answer_placeholder_and_review_today(client: AsyncClient, tmp_env):
+async def test_answer_missing_routing_is_400(client: AsyncClient, tmp_env):
+    """routing 里没有 evaluate 角色(测试 settings.yaml 只有 embed)→ 400。"""
     db = tmp_env
     s = db.exec("INSERT INTO sessions (kind, title) VALUES ('quiz', 'r')")
-    db.exec("INSERT INTO questions (session_id, question) VALUES (?, 'Q')", (s.lastrowid,))
+    db.exec("INSERT INTO questions (session_id, question, pack) VALUES (?, 'Q', '_core')",
+            (s.lastrowid,))
     qid = db.one("SELECT id FROM questions")["id"]
 
     r = await client.post(f"/api/quiz/questions/{qid}/answer",
                           json={"answer_text": "我的回答"})
-    assert r.status_code == 501
+    assert r.status_code == 400
     r = await client.post("/api/quiz/questions/999/answer",
                           json={"answer_text": "x"})
     assert r.status_code == 404
