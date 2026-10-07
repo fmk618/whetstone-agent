@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useSyncExternalStore } from 'react'
 import { isCloudConfirmError } from '../api/client'
 
@@ -84,9 +85,9 @@ export function CloudConfirmDialog() {
   const state = useSyncExternalStore(subscribe, getSnapshot)
   if (!state) return null
 
-  return (
+  const dialog = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      className="fixed inset-0 z-[70] flex items-center justify-center px-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
       role="dialog"
       aria-modal="true"
@@ -115,4 +116,6 @@ export function CloudConfirmDialog() {
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(dialog, document.body) : null
 }

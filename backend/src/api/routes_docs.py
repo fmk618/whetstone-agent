@@ -194,12 +194,21 @@ async def upload(
     if sensitivity is None:
         sensitivity = default_sensitivity(hits)
 
+    sens_markers = list(hits) if sensitivity == "local_only" else []
     chunks = chunk_markdown(text, file=filename)
 
     if chunks:
         # 路由检查(可能抛 PrivacyNotConfirmed,由 main 统一转 409)
-        decision = rt.route("embed", sens_confirmed=confirm_cloud)
-        embeddings = await rt.embed([c.text for c in chunks], sens_confirmed=confirm_cloud)
+        decision = rt.route(
+            "embed",
+            sens_confirmed=confirm_cloud,
+            sens_markers=sens_markers,
+        )
+        embeddings = await rt.embed(
+            [c.text for c in chunks],
+            sens_confirmed=confirm_cloud,
+            sens_markers=sens_markers,
+        )
         collection = _collection_for(doc_type)
         _delete_doc_vectors(store, doc_id)  # 重建前先清掉旧向量,避免块数变少留尾巴
         store.add(collection, chunks, embeddings,

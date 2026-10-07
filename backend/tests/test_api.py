@@ -83,20 +83,34 @@ FAKE_DIM = 8
 def fake_embed(monkeypatch: pytest.MonkeyPatch):
     """假 embed:固定维度向量,同时记录路由是否需要确认。"""
     calls: list[list[str]] = []
+    route_calls: list[tuple[str, list[str]]] = []
+    embed_markers: list[list[str]] = []
 
-    async def _embed(texts: list[str], *, sens_confirmed: bool = False):
+    async def _embed(
+        texts: list[str],
+        *,
+        sens_confirmed: bool = False,
+        sens_markers: list[str] | None = None,
+    ):
         calls.append(list(texts))
+        embed_markers.append(list(sens_markers or []))
         return [[float(len(text) % FAKE_DIM + 1)] * FAKE_DIM for text in texts]
 
-    def _route(role: str, *, sens_confirmed: bool = False):
+    def _route(
+        role: str,
+        *,
+        sens_confirmed: bool = False,
+        sens_markers: list[str] | None = None,
+    ):
         from src.llm.router import RouteDecision
+        route_calls.append((role, list(sens_markers or [])))
         return RouteDecision(provider_id="fake", model="fake-embed", is_local=True)
 
     import src.api.routes_docs as docs_mod
     monkeypatch.setattr(docs_mod, "get_router",
                         lambda: type("R", (), {"embed": staticmethod(_embed),
                                                "route": staticmethod(_route)})())
-    return calls
+    return {"calls": calls, "route_calls": route_calls, "embed_markers": embed_markers}
 
 
 # -- 会话 CRUD + 导出 ----------------------------------------------------------
@@ -215,7 +229,7 @@ MD_WITH_PHONE = """# 简历
 
 
 @pytest.mark.asyncio
-async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env,
+async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env, monkeypatch,
                                          fake_embed):
     r = await client.post("/api/docs/upload",
                           files={"file": ("resume.md", MD_WITH_PHONE.encode("utf-8"),
@@ -226,6 +240,8 @@ async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env,
     assert body["n_chunks"] >= 1
     assert body["sensitivity"] == "local_only"  # 检测到手机号
     assert body["sens_hits"].get("phone") == 1
+    assert fake_embed["route_calls"][-1] == ("embed", ["phone"])
+    assert fake_embed["embed_markers"][-1] == ["phone"]
     assert body["scanned"] is None
     doc_id = body["doc_id"]
     assert len(doc_id) == 64  # sha256
@@ -257,6 +273,40 @@ async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env,
     from src.api.routes_docs import get_store
     col = get_store()._col("personal")
     assert col.count() == body["n_chunks"]
+
+    # 简历抽取后生成 profile_claims,后续出题不再卡在“未完成抽取”
+    from src.ingest.profile import Claim, Competency, ExtractionResult
+    from src.llm.router import RouteDecision
+    import src.api.routes_docs as docs_mod
+
+    class _Registry:
+        def get(self, _provider_id):
+            return object()
+
+    class _ExtractRouter:
+        registry = _Registry()
+
+        def route(self, role, *, sens_confirmed=False, sens_markers=None):
+            return RouteDecision(provider_id="fake", model="fake-extract", is_local=True)
+
+    async def _fake_extract(provider, model, text, *, file):
+        return ExtractionResult(competencies=[Competency(
+            competency="系统设计",
+            type="skill",
+            claims=[Claim(
+                text="做了一个系统,效果不错。",
+                evidence_strength="listed_only",
+                source={"file": file, "section": "项目经历"},
+            )],
+        )])
+
+    monkeypatch.setattr(docs_mod, "get_router", lambda: _ExtractRouter())
+    monkeypatch.setattr(docs_mod, "extract_profile", _fake_extract)
+    r = await client.post(f"/api/docs/{doc_id}/profile/extract")
+    assert r.status_code == 200
+    assert r.json()["claims"] == 1
+    r = await client.get(f"/api/docs/{doc_id}/profile")
+    assert r.status_code == 200 and r.json()[0]["competency"] == "系统设计"
 
     # 删除:documents 行 + 向量 + raw 文件
     r = await client.delete(f"/api/docs/{doc_id}")

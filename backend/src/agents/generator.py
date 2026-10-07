@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Callable, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..llm.base import ChatMessage
 from ..llm.structured import structured_output
@@ -33,6 +33,29 @@ class Question(BaseModel):
     provenance: Provenance = Field(default_factory=Provenance)
     follow_ups: list[str] = []
     competency: str = ""  # 归属能力项,复习聚合用
+
+    @field_validator("difficulty", mode="before")
+    @classmethod
+    def normalize_difficulty(cls, value):
+        if isinstance(value, str):
+            labels = {
+                "very easy": 1,
+                "easy": 2,
+                "medium": 3,
+                "moderate": 3,
+                "hard": 4,
+                "difficult": 4,
+                "very hard": 5,
+                "expert": 5,
+            }
+            normalized = value.strip().lower()
+            if normalized in labels:
+                return labels[normalized]
+            try:
+                return int(normalized)
+            except ValueError:
+                pass
+        return value
 
 
 class QuestionList(BaseModel):

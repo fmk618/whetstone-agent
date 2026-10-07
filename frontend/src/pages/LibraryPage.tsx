@@ -10,6 +10,7 @@ import type {
   DocTypeLoose,
   LibraryDoc,
   ReindexResponse,
+  UploadDocResponse,
 } from '../api/types'
 
 /* ============================================================
@@ -317,6 +318,18 @@ export default function LibraryPage() {
     queryFn: () => get<LibraryDoc[]>('/api/docs'),
   })
 
+  async function extractResume(data: UploadDocResponse) {
+    const send = (opts: { confirmCloud: boolean }) =>
+      post(`/api/docs/${data.doc_id}/profile/extract`, {}, {
+        query: { confirm_cloud: opts.confirmCloud },
+      })
+    try {
+      await send({ confirmCloud: false })
+    } catch (err) {
+      await requestWithCloudConfirm(send, err)
+    }
+  }
+
   return (
     <div>
       {toast}
@@ -335,6 +348,7 @@ export default function LibraryPage() {
       />
       <DocumentUploadZone
         onToast={show}
+        onUploaded={extractResume}
         options={[{ value: 'resume', label: '简历' }]}
         title="上传简历"
         description="简历是生成知识档案和出题练习的最小资料。"

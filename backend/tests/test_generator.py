@@ -41,6 +41,17 @@ class FakeProvider:
         return json.dumps(self.payload, ensure_ascii=False)
 
 
+def test_question_normalizes_text_difficulty():
+    question = Question(
+        question="如何验证方案?",
+        layer="resume",
+        pack="tech",
+        difficulty="hard",
+        reference_answer="通过指标和压测验证。",
+    )
+    assert question.difficulty == 4
+
+
 class FakeRetriever:
     """假检索:固定返回片段(personal 与 reference 各自可配)。"""
 

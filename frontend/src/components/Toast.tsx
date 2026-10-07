@@ -1,5 +1,6 @@
 // 轻量 toast:useToast() 提供 { toast: 渲染节点, show(text, kind) }
 // 页面在根部渲染 {toast} 即可;自动 2.6s 消失。零依赖,样式走 index.css token。
+import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type ToastKind = 'success' | 'error' | 'info'
@@ -45,32 +46,31 @@ export function useToast(): {
     )
   }, [])
 
-  const toast = item ? (
+  const toastContent = item ? (
     <div
       key={item.id}
-      className="toast-enter"
+      className="toast-container toast-enter"
       role="status"
       aria-live="polite"
       style={{
-        position: 'fixed',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 60,
         maxWidth: 'min(90vw, 480px)',
         padding: '10px 16px',
         borderRadius: '8px',
         fontSize: '13px',
         lineHeight: 1.5,
         wordBreak: 'break-word',
-        boxShadow: '0 2px 6px rgba(0,0,0,.10), 0 10px 28px rgba(0,0,0,.08)',
+        boxShadow: '0 2px 6px rgba(0,0,0,.10), 0 10px 28px rgba(0,0,0,0.08)',
         ...KIND_STYLE[item.kind],
-        // bg/fg 由 KIND_STYLE 提供,default 用 token
       }}
     >
       {item.text}
     </div>
   ) : null
 
-  return { toast, show }
+  return {
+    toast: toastContent && typeof document !== 'undefined'
+      ? createPortal(toastContent, document.body)
+      : null,
+    show,
+  }
 }
