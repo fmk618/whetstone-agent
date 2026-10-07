@@ -1,8 +1,9 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { isCloudConfirmError, post } from '../api/client'
 import { requestWithCloudConfirm } from './CloudConfirmDialog'
 import { Select } from './Select'
+import { useOperations } from './OperationProvider'
 import type { DocType, UploadDocResponse } from '../api/types'
 
 const MAX_SIZE = 20 * 1024 * 1024
@@ -31,6 +32,13 @@ type UploadMessage = {
 
 type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'complete' | 'partial' | 'error'
 type UploadStepState = 'upcoming' | 'current' | 'complete' | 'failed'
+
+type UploadTaskResult = {
+  status: 'success' | 'partial'
+  message: string
+  toast: string
+  data?: UploadDocResponse
+}
 
 function getStepState(step: 'uploading' | 'extracting' | 'complete', phase: UploadPhase): UploadStepState {
   if (step === 'uploading') {
@@ -62,13 +70,17 @@ export function DocumentUploadZone({
   title,
   description,
 }: DocumentUploadZoneProps) {
-  const queryClient = useQueryClient()
+  const location = useLocation()
+  const { operations, startOperation } = useOperations()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [picked, setPicked] = useState<File | null>(null)
   const [docType, setDocType] = useState<DocType>(options[0]?.value ?? 'resume')
   const [uploadMsg, setUploadMsg] = useState<UploadMessage | null>(null)
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
+  const isProcessing = operations.some((operation) => (
+    operation.kind === 'document-upload' && operation.status === 'running'
+  ))
 
   function pickFile(e: ChangeEvent<HTMLInputElement>) {
     setPicked(e.target.files?.[0] ?? null)
@@ -79,81 +91,101 @@ export function DocumentUploadZone({
   function onDrop(e: DragEvent<HTMLElement>) {
     e.preventDefault()
     setDragOver(false)
-    if (uploadMutation.isPending) return
+    if (isProcessing) return
     setPicked(e.dataTransfer.files?.[0] ?? null)
     setUploadMsg(null)
     setUploadPhase('idle')
   }
 
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('doc_type', docType)
-      const send = (opts: { confirmCloud: boolean }) =>
-        post<UploadDocResponse>('/api/docs/upload', fd, {
-          query: { confirm_cloud: opts.confirmCloud },
-        })
-      try {
-        return { data: await send({ confirmCloud: false }), cloudConfirmed: false }
-      } catch (err) {
-        return {
-          data: await requestWithCloudConfirm(send, err),
-          cloudConfirmed: true,
-        }
-      }
-    },
-    onSuccess: async ({ data, cloudConfirmed }) => {
-      void queryClient.invalidateQueries({ queryKey: ['docs'] })
-      void queryClient.invalidateQueries({ queryKey: ['profile'] })
+  async function upload(file: File) {
+    setUploadMsg(null)
+    setUploadPhase('uploading')
+    try {
+      const result = await startOperation<UploadTaskResult>({
+        kind: 'document-upload',
+        title: `上传资料：${file.name}`,
+        route: location.pathname,
+        steps: onUploaded
+          ? [{ label: '上传并建立索引' }, { label: '提取能力档案' }, { label: '完成' }]
+          : [{ label: '上传并建立索引' }, { label: '完成' }],
+        invalidate: [['docs'], ['profile']],
+        summary: (task) => task.message,
+        isPartial: (task) => task.status === 'partial',
+        execute: async ({ advance }): Promise<UploadTaskResult> => {
+          const fd = new FormData()
+          fd.append('file', file)
+          fd.append('doc_type', docType)
+          const send = (opts: { confirmCloud: boolean }) =>
+            post<UploadDocResponse>('/api/docs/upload', fd, {
+              query: { confirm_cloud: opts.confirmCloud },
+            })
+
+          advance(0, '正在上传文件并建立索引。')
+          let data: UploadDocResponse
+          let cloudConfirmed = false
+          try {
+            data = await send({ confirmCloud: false })
+          } catch (err) {
+            try {
+              data = await requestWithCloudConfirm(send, err)
+              cloudConfirmed = true
+            } catch (confirmError) {
+              if (isCloudConfirmError((confirmError as { body?: unknown }).body)) {
+                return {
+                  status: 'partial',
+                  message: '检测到敏感信息。已取消发送到云端，本次没有完成入库；如需继续，请重新上传并同意发送。',
+                  toast: '已取消敏感资料的云端处理',
+                }
+              }
+              throw confirmError
+            }
+          }
+
+          const prefix = data.skipped ? '上传成功（同一文件已入库，本次跳过）' : '上传成功'
+          const baseText = `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`
+          if (!onUploaded) {
+            return { status: 'success', message: baseText, toast: `已上传《${data.filename}》（${data.n_chunks} 块）`, data }
+          }
+
+          setUploadPhase('extracting')
+          advance(1, '文件已入库，正在提取能力档案。')
+          try {
+            await onUploaded(data, { cloudConfirmed })
+            return {
+              status: 'success',
+              message: `${baseText}，已完成能力抽取，可以开始出题练习。`,
+              toast: `已上传《${data.filename}》，并完成能力抽取`,
+              data,
+            }
+          } catch (err) {
+            const body = (err as { body?: { detail?: string; retryable?: boolean } }).body
+            const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
+            const retryHint = body?.retryable
+              ? '云端能力抽取暂时失败，请稍后到知识档案页重试。'
+              : '能力抽取未完成，请到知识档案页重试。'
+            return {
+              status: 'partial',
+              message: `${baseText}。简历已保存，但${retryHint}${detail}`,
+              toast: `《${data.filename}》已保存，但能力抽取未完成`,
+              data,
+            }
+          }
+        },
+      })
       setPicked(null)
       if (fileRef.current) fileRef.current.value = ''
-      const prefix = data.skipped ? '上传成功（同一文件已入库，本次跳过）' : '上传成功'
-      const baseText = `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`
-
-      if (!onUploaded) {
-        setUploadPhase('complete')
-        setUploadMsg({ status: 'success', text: baseText })
-        onToast(`已上传《${data.filename}》（${data.n_chunks} 块）`, 'success')
-        return
-      }
-
-      setUploadPhase('extracting')
-      try {
-        await onUploaded(data, { cloudConfirmed })
-        setUploadPhase('complete')
-        setUploadMsg({ status: 'success', text: `${baseText}，已完成能力抽取，可以开始出题练习。` })
-        onToast(`已上传《${data.filename}》，并完成能力抽取`, 'success')
-      } catch (err) {
-        const body = (err as { body?: { detail?: string; retryable?: boolean } }).body
-        const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
-        const retryHint = body?.retryable
-          ? '云端能力抽取暂时失败，请稍后到知识档案页重试。'
-          : '能力抽取未完成，请到知识档案页重试。'
-        setUploadPhase('partial')
-        setUploadMsg({
-          status: 'partial',
-          text: `${baseText}。简历已保存，但${retryHint}${detail}`,
-        })
-        onToast(`《${data.filename}》已保存，但能力抽取未完成`, 'error')
-      }
-    },
-    onError: (err) => {
-      const body = (err as { body?: unknown }).body
-      if (isCloudConfirmError(body)) {
-        setUploadPhase('partial')
-        setUploadMsg({
-          status: 'partial',
-          text: '检测到敏感信息。已取消发送到云端，本次没有完成入库；如需继续，请重新上传并同意发送。',
-        })
-        return
-      }
-      const text = err instanceof Error ? err.message : String(err)
-      const detail = (body as { detail?: string } | undefined)?.detail
+      setUploadPhase(result.status === 'success' ? 'complete' : 'partial')
+      setUploadMsg({ status: result.status, text: result.message })
+      onToast(result.toast, result.status === 'success' ? 'success' : 'error')
+    } catch (err) {
+      const body = (err as { body?: { detail?: string } }).body
       setUploadPhase('error')
-      setUploadMsg({ status: 'error', text: detail || text })
-    },
-  })
+      setUploadMsg({
+        status: 'error',
+        text: body?.detail || (err instanceof Error ? err.message : String(err)),
+      })
+    }
+  }
 
   function submit() {
     if (!picked) {
@@ -168,10 +200,9 @@ export function DocumentUploadZone({
     }
     setUploadMsg(null)
     setUploadPhase('uploading')
-    uploadMutation.mutate(picked)
+    void upload(picked)
   }
 
-  const isProcessing = uploadMutation.isPending
   const showProgress = uploadPhase !== 'idle'
   const phaseText = uploadPhase === 'uploading'
     ? '正在上传文件并建立索引…'

@@ -1033,3 +1033,182 @@ select.input {
 .drawer-panel {
   animation: drawer-slide-in 180ms ease-out both;
 }
+
+/* ---------- 应用级处理进度 ---------- */
+.nav-operation-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+.dock-operation-dot {
+  position: absolute;
+  top: 5px;
+  right: calc(50% - 17px);
+}
+
+.operation-tray {
+  position: fixed;
+  z-index: 50;
+  right: 20px;
+  bottom: 20px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(620px, calc(100dvh - 40px));
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--border-ink);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
+}
+
+.operation-tray-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 2px 9px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.operation-count {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.operation-tray-list {
+  display: grid;
+  gap: 8px;
+}
+
+.operation-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.operation-card.is-error { border-color: var(--danger); }
+.operation-card.is-partial { border-color: var(--warning); }
+
+.operation-status-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.operation-status-icon.is-success { color: var(--success); background: var(--success-soft); }
+.operation-status-icon.is-partial { color: var(--warning); background: var(--warning-soft); }
+.operation-status-icon.is-error { color: var(--danger); background: var(--danger-soft); }
+.operation-status-icon.is-running {
+  border: 2px solid var(--border-ink);
+  border-top-color: var(--accent);
+  animation: operation-spin 800ms linear infinite;
+}
+
+.operation-dismiss {
+  width: 28px;
+  height: 28px;
+  margin: -5px -5px 0 0;
+  border-radius: 999px;
+  color: var(--fg-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.operation-dismiss:hover { background: var(--bg-inset); color: var(--fg); }
+
+.operation-steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.operation-track {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  left: 12px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.operation-track-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 180ms ease-out;
+}
+
+.operation-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+  color: var(--fg-subtle);
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.operation-step-marker {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 2px solid var(--border-ink);
+  border-radius: 999px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.operation-step.is-current { color: var(--fg); font-weight: 600; }
+.operation-step.is-current .operation-step-marker,
+.operation-step.is-complete .operation-step-marker { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.operation-step.is-complete { color: var(--fg-muted); }
+.operation-step.is-failed { color: var(--danger); }
+.operation-step.is-failed .operation-step-marker { border-color: var(--danger); color: var(--danger); }
+
+.operation-return {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@keyframes operation-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 767px) {
+  .operation-tray {
+    right: 12px;
+    bottom: 62px;
+    width: min(420px, calc(100vw - 24px));
+    max-height: min(52dvh, 460px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .operation-status-icon.is-running { animation: none; }
+  .operation-track-fill { transition: none; }
+}

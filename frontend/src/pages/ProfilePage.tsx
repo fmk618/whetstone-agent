@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { get, post } from '../api/client'
 import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
+import { useOperations } from '../components/OperationProvider'
 import { DocumentUploadZone } from '../components/DocumentUploadZone'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
@@ -190,35 +191,50 @@ export default function ProfilePage() {
   })
 
   const docs = useMemo(() => docsQuery.data ?? [], [docsQuery.data])
-  const queryClient = useQueryClient()
+  const { operations, startOperation } = useOperations()
   const profileDocs = docs.filter((doc) => ['resume', 'project', 'notes'].includes(doc.doc_type))
-
-  const extractMutation = useMutation({
-    mutationFn: async (docId: string) => {
-      const send = (opts: { confirmCloud: boolean }) =>
-        post(`/api/docs/${docId}/profile/extract`, {}, {
-          query: { confirm_cloud: opts.confirmCloud },
-        })
-      try {
-        return await send({ confirmCloud: false })
-      } catch (error) {
-        return await requestWithCloudConfirm(send, error)
-      }
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['docs'] })
-      void queryClient.invalidateQueries({ queryKey: ['profile'] })
-    },
-  })
+  const isExtracting = operations.some((operation) => (
+    operation.kind === 'profile-extract' && operation.status === 'running'
+  ))
 
   async function extractProfiles() {
-    try {
-      for (const doc of profileDocs) {
-        await extractMutation.mutateAsync(doc.id)
-      }
-    } catch {
-      // The mutation state renders the actionable error message.
-    }
+    if (!profileDocs.length || isExtracting) return
+    await startOperation<{ completed: number; failed: string[] }>({
+      kind: 'profile-extract',
+      title: '提取知识档案',
+      route: '/profile',
+      steps: [...profileDocs.map((doc) => ({ label: `提取 ${doc.filename}` })), { label: '完成' }],
+      invalidate: [['docs'], ['profile']],
+      isPartial: (result) => result.failed.length > 0,
+      summary: (result) => result.failed.length
+        ? `${result.completed} 份资料已完成，${result.failed.length} 份待重试。`
+        : `${result.completed} 份资料已完成能力档案提取。`,
+      execute: async ({ advance }) => {
+        const failed: string[] = []
+        let completed = 0
+        for (const [index, doc] of profileDocs.entries()) {
+          advance(index, `正在提取《${doc.filename}》的能力档案。`)
+          const send = (opts: { confirmCloud: boolean }) =>
+            post(`/api/docs/${doc.id}/profile/extract`, {}, {
+              query: { confirm_cloud: opts.confirmCloud },
+            })
+          try {
+            await send({ confirmCloud: false })
+          } catch (error) {
+            try {
+              await requestWithCloudConfirm(send, error)
+            } catch (confirmError) {
+              const detail = (confirmError as { body?: { detail?: string } }).body?.detail
+              failed.push(`${doc.filename}${detail ? `：${detail}` : ''}`)
+              continue
+            }
+          }
+          completed += 1
+        }
+        advance(profileDocs.length, failed.length ? '已完成可提取的资料，请查看待重试项。' : '能力档案已全部提取完成。')
+        return { completed, failed }
+      },
+    })
   }
 
   // 每份文档对应一次 /profile 请求(数量可控,后端单表索引按 doc_id 命中)
@@ -261,9 +277,9 @@ export default function ProfilePage() {
             type="button"
             className="btn btn-ghost"
             onClick={() => void extractProfiles()}
-            disabled={docsQuery.isFetching || extractMutation.isPending || profileDocs.length === 0}
+            disabled={docsQuery.isFetching || isExtracting || profileDocs.length === 0}
           >
-            {extractMutation.isPending ? '提取中…' : '提取知识档案'}
+            {isExtracting ? '提取中…（可切换页面）' : '提取知识档案'}
           </button>
         }
       />
@@ -279,13 +295,6 @@ export default function ProfilePage() {
         title="补充资料"
         description="项目和笔记可以补充能力证据；岗位描述和参考资料用于练习时提供上下文。"
       />
-
-      {extractMutation.isError ? (
-        <div className="upload-message is-error mb-6" role="alert">
-          <strong>提取失败</strong>
-          <span>{extractMutation.error instanceof Error ? extractMutation.error.message : '请稍后重试'}</span>
-        </div>
-      ) : null}
 
       {docsQuery.isLoading ? (
         <section className="card p-5 md:p-6">

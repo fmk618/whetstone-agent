@@ -1,6 +1,8 @@
 import type { ReactNode, SVGProps } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { CloudConfirmDialog } from './CloudConfirmDialog'
+import { OperationProgress } from './OperationProgress'
+import { useOperations } from './OperationProvider'
 
 /** 统一 1.5 描边线性图标(与整体「锻铁」线条语言一致)。装订线内 24px 视觉尺寸 */
 function Icon({ children, ...props }: SVGProps<SVGSVGElement>) {
@@ -136,7 +138,7 @@ const NAV_ITEMS: NavItem[] = [
 const RAIL_ITEMS = NAV_ITEMS.filter((item) => item.to !== '/settings')
 const SETTINGS_ITEM = NAV_ITEMS[NAV_ITEMS.length - 1]
 
-function RailItem({ item, tabletOnly = false }: { item: NavItem; tabletOnly?: boolean }) {
+function RailItem({ item, busy = false, tabletOnly = false }: { item: NavItem; busy?: boolean; tabletOnly?: boolean }) {
   return (
     <NavLink
       to={item.to}
@@ -146,12 +148,13 @@ function RailItem({ item, tabletOnly = false }: { item: NavItem; tabletOnly?: bo
     >
       <span className="side-nav-icon">{item.icon}</span>
       <span className="side-nav-label">{item.label}</span>
+      {busy ? <span className="nav-operation-dot" aria-label={`${item.label}有正在处理的任务`} /> : null}
       {tabletOnly ? <span className="side-nav-tooltip" aria-hidden="true">{item.label}</span> : null}
     </NavLink>
   )
 }
 
-function DockItem({ item }: { item: NavItem }) {
+function DockItem({ item, busy = false }: { item: NavItem; busy?: boolean }) {
   return (
     <NavLink
       to={item.to}
@@ -170,6 +173,7 @@ function DockItem({ item }: { item: NavItem }) {
           ) : null}
           <span className="[&>svg]:h-5 [&>svg]:w-5">{item.icon}</span>
           <span className="dock-label max-w-full truncate">{item.label}</span>
+          {busy ? <span className="nav-operation-dot dock-operation-dot" aria-label={`${item.label}有正在处理的任务`} /> : null}
         </>
       )}
     </NavLink>
@@ -177,6 +181,11 @@ function DockItem({ item }: { item: NavItem }) {
 }
 
 export function SideNavLayout() {
+  const { operations } = useOperations()
+  const busyRoutes = new Set(
+    operations.filter((operation) => operation.status === 'running').map((operation) => operation.route),
+  )
+
   return (
     <div className="app-shell flex h-full min-h-0" style={{ backgroundColor: 'var(--bg)', color: 'var(--fg)' }}>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
@@ -188,11 +197,11 @@ export function SideNavLayout() {
         </NavLink>
 
         <nav className="side-nav-list" aria-label="主导航链接">
-          {RAIL_ITEMS.map((item) => <RailItem key={item.to} item={item} tabletOnly />)}
+          {RAIL_ITEMS.map((item) => <RailItem key={item.to} item={item} busy={busyRoutes.has(item.to)} tabletOnly />)}
         </nav>
 
         <div className="side-nav-settings">
-          <RailItem item={SETTINGS_ITEM} tabletOnly />
+          <RailItem item={SETTINGS_ITEM} busy={busyRoutes.has(SETTINGS_ITEM.to)} tabletOnly />
         </div>
       </aside>
 
@@ -203,10 +212,11 @@ export function SideNavLayout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-[52px] items-stretch md:hidden" style={{ backgroundColor: 'var(--bg)', borderTop: '0.5px solid var(--border-ink, var(--border-strong))' }} aria-label="主导航">
-        {NAV_ITEMS.map((item) => <DockItem key={item.to} item={item} />)}
+        {NAV_ITEMS.map((item) => <DockItem key={item.to} item={item} busy={busyRoutes.has(item.to)} />)}
       </nav>
 
       <CloudConfirmDialog />
+      <OperationProgress />
     </div>
   )
 }
