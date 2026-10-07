@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { get, post } from '../api/client'
@@ -192,6 +192,7 @@ export default function ProfilePage() {
   const docs = useMemo(() => docsQuery.data ?? [], [docsQuery.data])
   const queryClient = useQueryClient()
   const profileDocs = docs.filter((doc) => ['resume', 'project', 'notes'].includes(doc.doc_type))
+  const [extractProgress, setExtractProgress] = useState({ completed: 0, total: 0, current: '' })
 
   const extractMutation = useMutation({
     mutationFn: async (docId: string) => {
@@ -213,8 +214,11 @@ export default function ProfilePage() {
 
   async function extractProfiles() {
     try {
-      for (const doc of profileDocs) {
+      setExtractProgress({ completed: 0, total: profileDocs.length, current: profileDocs[0]?.filename ?? '' })
+      for (const [index, doc] of profileDocs.entries()) {
+        setExtractProgress({ completed: index, total: profileDocs.length, current: doc.filename })
         await extractMutation.mutateAsync(doc.id)
+        setExtractProgress({ completed: index + 1, total: profileDocs.length, current: doc.filename })
       }
     } catch {
       // The mutation state renders the actionable error message.
@@ -267,6 +271,18 @@ export default function ProfilePage() {
           </button>
         }
       />
+
+      {extractMutation.isPending ? (
+        <div className="inline-progress mb-6" role="status" aria-live="polite">
+          <div className="inline-progress-label">
+            <span>正在提取《{extractProgress.current}》的能力档案…</span>
+            <strong>{extractProgress.completed} / {extractProgress.total}</strong>
+          </div>
+          <div className="inline-progress-track" role="progressbar" aria-label="知识档案提取进度" aria-valuemin={0} aria-valuemax={extractProgress.total} aria-valuenow={extractProgress.completed}>
+            <span className="inline-progress-fill" style={{ width: `${extractProgress.total ? (extractProgress.completed / extractProgress.total) * 100 : 0}%` }} />
+          </div>
+        </div>
+      ) : null}
 
       <DocumentUploadZone
         onToast={show}

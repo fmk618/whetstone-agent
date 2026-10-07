@@ -1033,3 +1033,59 @@ select.input {
 .drawer-panel {
   animation: drawer-slide-in 180ms ease-out both;
 }
+
+.inline-progress {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-inset);
+}
+
+.inline-progress.is-failure { border-color: var(--danger); }
+
+.inline-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.inline-progress-track {
+  height: 7px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.inline-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.inline-progress-track.is-indeterminate .inline-progress-fill {
+  width: 38% !important;
+  animation: inline-progress-slide 1.1s ease-in-out infinite;
+}
+
+.inline-progress-detail {
+  margin-top: 6px;
+  color: var(--fg-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+@keyframes inline-progress-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(310%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inline-progress-fill { transition: none; }
+  .inline-progress-track.is-indeterminate .inline-progress-fill { animation: none; transform: none; }
+}

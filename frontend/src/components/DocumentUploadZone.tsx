@@ -1,6 +1,6 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { isCloudConfirmError, post } from '../api/client'
+import { isCloudConfirmError, postFormDataWithProgress } from '../api/client'
 import { requestWithCloudConfirm } from './CloudConfirmDialog'
 import { Select } from './Select'
 import type { DocType, UploadDocResponse } from '../api/types'
@@ -30,24 +30,6 @@ type UploadMessage = {
 }
 
 type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'complete' | 'partial' | 'error'
-type UploadStepState = 'upcoming' | 'current' | 'complete' | 'failed'
-
-function getStepState(step: 'uploading' | 'extracting' | 'complete', phase: UploadPhase): UploadStepState {
-  if (step === 'uploading') {
-    if (phase === 'uploading') return 'current'
-    if (phase === 'extracting' || phase === 'complete' || phase === 'partial') return 'complete'
-    return phase === 'error' ? 'failed' : 'upcoming'
-  }
-  if (step === 'extracting') {
-    if (phase === 'extracting') return 'current'
-    if (phase === 'complete') return 'complete'
-    if (phase === 'partial') return 'failed'
-    return 'upcoming'
-  }
-  if (phase === 'complete') return 'complete'
-  if (phase === 'partial' || phase === 'error') return 'failed'
-  return 'upcoming'
-}
 
 function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
@@ -69,6 +51,7 @@ export function DocumentUploadZone({
   const [docType, setDocType] = useState<DocType>(options[0]?.value ?? 'resume')
   const [uploadMsg, setUploadMsg] = useState<UploadMessage | null>(null)
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
+  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number | null }>({ loaded: 0, total: null })
 
   function pickFile(e: ChangeEvent<HTMLInputElement>) {
     setPicked(e.target.files?.[0] ?? null)
@@ -90,10 +73,13 @@ export function DocumentUploadZone({
       const fd = new FormData()
       fd.append('file', file)
       fd.append('doc_type', docType)
-      const send = (opts: { confirmCloud: boolean }) =>
-        post<UploadDocResponse>('/api/docs/upload', fd, {
+      const send = (opts: { confirmCloud: boolean }) => {
+        setUploadBytes({ loaded: 0, total: file.size })
+        return postFormDataWithProgress<UploadDocResponse>('/api/docs/upload', fd, {
           query: { confirm_cloud: opts.confirmCloud },
+          onProgress: setUploadBytes,
         })
+      }
       try {
         return { data: await send({ confirmCloud: false }), cloudConfirmed: false }
       } catch (err) {
@@ -173,8 +159,11 @@ export function DocumentUploadZone({
 
   const isProcessing = uploadMutation.isPending
   const showProgress = uploadPhase !== 'idle'
+  const uploadPercent = uploadBytes.total && uploadBytes.total > 0
+    ? Math.min(100, Math.round((uploadBytes.loaded / uploadBytes.total) * 100))
+    : null
   const phaseText = uploadPhase === 'uploading'
-    ? '正在上传文件并建立索引…'
+    ? uploadPercent === 100 ? '文件已发送，正在建立索引…' : '正在上传文件…'
     : uploadPhase === 'extracting'
       ? '文件已入库，正在提取能力档案…'
       : uploadPhase === 'complete'
@@ -184,7 +173,6 @@ export function DocumentUploadZone({
           : uploadPhase === 'error'
             ? '上传流程未完成。'
             : ''
-  const finalStepLabel = uploadPhase === 'partial' ? '部分完成' : uploadPhase === 'error' ? '未完成' : '完成'
 
   return (
     <section className="card card-raised mb-6">
@@ -273,24 +261,24 @@ export function DocumentUploadZone({
       </div>
 
       {showProgress ? (
-        <div className={`upload-progress ${uploadPhase === 'error' || uploadPhase === 'partial' ? 'is-failure' : ''}`} role="status" aria-live="polite" aria-atomic="true">
-          <div className="upload-progress-phase">{phaseText}</div>
-          <ol className="upload-progress-steps" aria-label="上传处理进度">
-            <li className={`upload-progress-step is-${getStepState('uploading', uploadPhase)}`} aria-current={uploadPhase === 'uploading' ? 'step' : undefined}>
-              <span className="upload-progress-marker" aria-hidden="true">1</span>
-              <span>上传并建立索引</span>
-            </li>
-            {onUploaded ? (
-              <li className={`upload-progress-step is-${getStepState('extracting', uploadPhase)}`} aria-current={uploadPhase === 'extracting' ? 'step' : undefined}>
-                <span className="upload-progress-marker" aria-hidden="true">2</span>
-                <span>提取能力档案</span>
-              </li>
-            ) : null}
-            <li className={`upload-progress-step is-${getStepState('complete', uploadPhase)}`} aria-current={uploadPhase === 'complete' || uploadPhase === 'partial' || uploadPhase === 'error' ? 'step' : undefined}>
-              <span className="upload-progress-marker" aria-hidden="true">{onUploaded ? '3' : '2'}</span>
-              <span>{finalStepLabel}</span>
-            </li>
-          </ol>
+        <div className={`inline-progress ${uploadPhase === 'error' || uploadPhase === 'partial' ? 'is-failure' : ''}`} role="status" aria-live="polite" aria-atomic="true">
+          <div className="inline-progress-label">
+            <span>{phaseText}</span>
+            {uploadPhase === 'uploading' && uploadPercent !== null ? <strong>{uploadPercent}%</strong> : null}
+          </div>
+          <div
+            className={`inline-progress-track ${uploadPhase === 'uploading' && uploadPercent === null ? 'is-indeterminate' : ''}`}
+            role={uploadPercent !== null ? 'progressbar' : undefined}
+            aria-label="文件上传进度"
+            aria-valuemin={uploadPercent !== null ? 0 : undefined}
+            aria-valuemax={uploadPercent !== null ? 100 : undefined}
+            aria-valuenow={uploadPercent ?? undefined}
+          >
+            <span className="inline-progress-fill" style={{ width: `${uploadPercent ?? 100}%` }} />
+          </div>
+          {uploadPhase === 'uploading' && uploadPercent !== null ? (
+            <div className="inline-progress-detail">已发送 {formatBytes(uploadBytes.loaded)} / {formatBytes(uploadBytes.total ?? 0)}</div>
+          ) : null}
         </div>
       ) : null}
 

@@ -88,6 +88,48 @@ async function request<T>(
   return parseResponse<T>(res)
 }
 
+export interface UploadProgress {
+  loaded: number
+  total: number | null
+}
+
+/** FormData 上传，使用 XHR 暴露浏览器真实的已发送字节数。 */
+export function postFormDataWithProgress<T>(
+  path: string,
+  body: FormData,
+  options: RequestOptions & { onProgress?: (progress: UploadProgress) => void } = {},
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', buildUrl(path, options.query))
+    xhr.responseType = 'text'
+    xhr.upload.onprogress = (event) => {
+      options.onProgress?.({ loaded: event.loaded, total: event.lengthComputable ? event.total : null })
+    }
+    xhr.onerror = () => reject(new Error('网络连接失败，请检查后端是否已启动。'))
+    xhr.onabort = () => reject(new Error('上传已取消。'))
+    xhr.onload = () => {
+      let response: unknown = undefined
+      if (xhr.responseText) {
+        try {
+          response = JSON.parse(xhr.responseText)
+        } catch {
+          response = xhr.responseText
+        }
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiError(xhr.status, response))
+        return
+      }
+      resolve(response as T)
+    }
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => xhr.abort(), { once: true })
+    }
+    xhr.send(body)
+  })
+}
+
 /** GET 请求 */
 export function get<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return request<T>('GET', path, options)

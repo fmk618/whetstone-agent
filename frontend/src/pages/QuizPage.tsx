@@ -478,6 +478,15 @@ function GenerateToolbar({
         </button>
       </div>
 
+      {generateMutation.isPending ? (
+        <div className="inline-progress" role="status" aria-live="polite">
+          <div className="inline-progress-label"><span>正在检索资料并由模型生成题目…</span></div>
+          <div className="inline-progress-track is-indeterminate" aria-label="题目生成处理中">
+            <span className="inline-progress-fill" />
+          </div>
+        </div>
+      ) : null}
+
       {formError ? (
         <div className="mt-3">
           <ErrorBar message={formError} onRetry={() => generateMutation.mutate({ reuse: false, confirmCloud: false })} />
