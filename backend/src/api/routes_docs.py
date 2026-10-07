@@ -199,16 +199,21 @@ async def upload(
 
     if chunks:
         # 路由检查(可能抛 PrivacyNotConfirmed,由 main 统一转 409)
-        decision = rt.route(
-            "embed",
-            sens_confirmed=confirm_cloud,
-            sens_markers=sens_markers,
-        )
-        embeddings = await rt.embed(
-            [c.text for c in chunks],
-            sens_confirmed=confirm_cloud,
-            sens_markers=sens_markers,
-        )
+        try:
+            decision = rt.route(
+                "embed",
+                sens_confirmed=confirm_cloud,
+                sens_markers=sens_markers,
+            )
+            embeddings = await rt.embed(
+                [c.text for c in chunks],
+                sens_confirmed=confirm_cloud,
+                sens_markers=sens_markers,
+            )
+        except Exception:
+            if existing is None:
+                path.unlink(missing_ok=True)
+            raise
         collection = _collection_for(doc_type)
         _delete_doc_vectors(store, doc_id)  # 重建前先清掉旧向量,避免块数变少留尾巴
         store.add(collection, chunks, embeddings,
@@ -283,7 +288,8 @@ async def reindex(confirm_cloud: bool = False) -> dict:
     if not rows:
         return {"rebuilt": [], "docs": 0, "n_chunks": 0}
 
-    decision = rt.route("embed", sens_confirmed=confirm_cloud)
+    sens_markers = ["local_only"] if any(row["sensitivity"] == "local_only" for row in rows) else []
+    decision = rt.route("embed", sens_confirmed=confirm_cloud, sens_markers=sens_markers)
 
     prepared: list[tuple[dict, list, list[list[float]] | None]] = []
     dim: int | None = None
@@ -298,7 +304,11 @@ async def reindex(confirm_cloud: bool = False) -> dict:
         chunks = chunk_markdown(text, file=row["filename"])
         vectors = None
         if chunks:
-            vectors = await rt.embed([c.text for c in chunks], sens_confirmed=confirm_cloud)
+            vectors = await rt.embed(
+                [c.text for c in chunks],
+                sens_confirmed=confirm_cloud,
+                sens_markers=["local_only"] if row["sensitivity"] == "local_only" else [],
+            )
             dim = dim or len(vectors[0])
         prepared.append((dict(row), chunks, vectors))
 

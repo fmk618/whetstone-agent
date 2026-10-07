@@ -567,6 +567,96 @@ select.input {
   outline: none;
 }
 
+/* ---------- 上传阶段指示 ---------- */
+.upload-progress {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background-color: var(--bg);
+}
+
+.upload-progress.is-failure {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background-color: var(--danger-soft);
+}
+
+.upload-progress-phase {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.upload-progress-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upload-progress-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--fg-subtle);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.upload-progress-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-ink);
+  border-radius: 50%;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-progress-step.is-current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.upload-progress-step.is-current .upload-progress-marker {
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
+  color: var(--accent);
+}
+
+.upload-progress-step.is-complete {
+  color: var(--success);
+}
+
+.upload-progress-step.is-complete .upload-progress-marker {
+  border-color: var(--success);
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+
+.upload-progress-step.is-failed {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.upload-progress-step.is-failed .upload-progress-marker {
+  border-color: var(--danger);
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (max-width: 520px) {
+  .upload-progress-steps {
+    display: grid;
+    gap: 7px;
+  }
+}
+
 .upload-message {
   display: flex;
   align-items: flex-start;

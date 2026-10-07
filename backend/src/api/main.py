@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from openai import APIConnectionError
 
 from ..llm.router import PrivacyNotConfirmed
 from .routes_docs import router as docs_router
@@ -51,6 +52,20 @@ app.include_router(settings_router, prefix="/api")
 async def privacy_handler(request: Request, exc: PrivacyNotConfirmed):
     return JSONResponse(status_code=409,
                         content={"detail": str(exc), "provider_id": exc.provider_id})
+
+
+@app.exception_handler(APIConnectionError)
+async def provider_connection_handler(request: Request, exc: APIConnectionError):
+    logger.warning("LLM provider connection failed: %s", type(exc).__name__)
+    return JSONResponse(
+        status_code=502,
+        headers={"Retry-After": "5"},
+        content={
+            "detail": "云端模型连接失败，请检查 Qwen API Key、模型配置或网络后重试。",
+            "code": "provider_unavailable",
+            "retryable": True,
+        },
+    )
 
 
 @app.exception_handler(ValueError)
