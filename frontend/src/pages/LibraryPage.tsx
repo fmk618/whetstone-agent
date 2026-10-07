@@ -5,7 +5,6 @@ import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
 import { DocumentUploadZone, type UploadSuccessContext } from '../components/DocumentUploadZone'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
-import { useOperations } from '../components/OperationProvider'
 import { Reveal } from '../components/Motion'
 import type {
   DocTypeLoose,
@@ -68,7 +67,6 @@ function DocTable({
   onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
 }) {
   const queryClient = useQueryClient()
-  const { operations, startOperation } = useOperations()
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const deleteMutation = useMutation({
@@ -92,52 +90,30 @@ function DocTable({
     deleteMutation.mutate(docId)
   }
 
-  const isReindexing = operations.some((operation) => (
-    operation.kind === 'document-reindex' && operation.status === 'running'
-  ))
-
-  async function reindex() {
-    try {
-      const data = await startOperation<ReindexResponse>({
-        kind: 'document-reindex',
-        title: '重建资料索引',
-        route: '/',
-        steps: [
-          { label: '读取已入库资料' },
-          { label: '重新生成向量索引' },
-          { label: '完成' },
-        ],
-        invalidate: [['docs'], ['profile']],
-        summary: (result) => result.rebuilt.length
-          ? `已重建 ${result.docs} 份资料、${result.n_chunks} 个分块。`
-          : `${result.docs} 份资料索引已保持最新。`,
-        execute: async ({ advance }) => {
-          const send = (opts: { confirmCloud: boolean }) =>
-            post<ReindexResponse>('/api/docs/reindex', {}, { query: { confirm_cloud: opts.confirmCloud } })
-          advance(0, '正在读取已入库资料。')
-          advance(1, '正在重新生成向量索引。')
-          try {
-            const result = await send({ confirmCloud: false })
-            advance(2, '索引已重建，正在更新资料列表。')
-            return result
-          } catch (err) {
-            const result = await requestWithCloudConfirm(send, err)
-            advance(2, '索引已重建，正在更新资料列表。')
-            return result
-          }
-        },
-      })
+  const reindexMutation = useMutation({
+    mutationFn: async () => {
+      const send = (opts: { confirmCloud: boolean }) =>
+        post<ReindexResponse>('/api/docs/reindex', {}, { query: { confirm_cloud: opts.confirmCloud } })
+      try {
+        return await send({ confirmCloud: false })
+      } catch (err) {
+        return await requestWithCloudConfirm(send, err)
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['docs'] })
       onToast(
         data.rebuilt.length
           ? `重建完成:${data.rebuilt.join(', ')} 集合已重建,${data.docs} 份文档,共 ${data.n_chunks} 块`
           : `无需重建集合(索引已对齐),${data.docs} 份文档 ${data.n_chunks} 块已保持最新`,
         'success',
       )
-    } catch (err) {
+    },
+    onError: (err) => {
       const body = (err as { body?: { detail?: string } }).body
       onToast(body?.detail ?? (err instanceof Error ? err.message : String(err)), 'error')
-    }
-  }
+    },
+  })
 
   if (isLoading) {
     return (
@@ -206,10 +182,10 @@ function DocTable({
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  disabled={isReindexing}
-                  onClick={() => void reindex()}
+                  disabled={reindexMutation.isPending}
+                  onClick={() => reindexMutation.mutate()}
                 >
-                  {isReindexing ? '重建中…（可切换页面）' : '重建索引'}
+                  {reindexMutation.isPending ? '重建中…' : '重建索引'}
                 </button>
                 <button
                   type="button"
@@ -290,10 +266,10 @@ function DocTable({
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
-                        disabled={isReindexing}
-                        onClick={() => void reindex()}
+                        disabled={reindexMutation.isPending}
+                        onClick={() => reindexMutation.mutate()}
                       >
-                        {isReindexing ? '重建中…（可切换页面）' : '重建索引'}
+                        {reindexMutation.isPending ? '重建中…' : '重建索引'}
                       </button>
                       <button
                         type="button"
@@ -326,10 +302,10 @@ function DocTable({
           <button
             type="button"
             className={`btn btn-ghost ${deleteMutation.isPending ? 'btn-sm' : 'btn-sm'}`}
-            disabled={isReindexing}
-            onClick={() => void reindex()}
+            disabled={reindexMutation.isPending}
+            onClick={() => reindexMutation.mutate()}
           >
-            {isReindexing ? '重建中…（可切换页面）' : '重建全部索引'}
+            {reindexMutation.isPending ? '重建中…' : '重建全部索引'}
           </button>
         </div>
       </div>

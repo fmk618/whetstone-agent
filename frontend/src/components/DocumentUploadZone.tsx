@@ -1,9 +1,8 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { useLocation } from 'react-router-dom'
-import { isCloudConfirmError, post } from '../api/client'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { isCloudConfirmError, postFormDataWithProgress } from '../api/client'
 import { requestWithCloudConfirm } from './CloudConfirmDialog'
 import { Select } from './Select'
-import { useOperations } from './OperationProvider'
 import type { DocType, UploadDocResponse } from '../api/types'
 
 const MAX_SIZE = 20 * 1024 * 1024
@@ -31,31 +30,6 @@ type UploadMessage = {
 }
 
 type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'complete' | 'partial' | 'error'
-type UploadStepState = 'upcoming' | 'current' | 'complete' | 'failed'
-
-type UploadTaskResult = {
-  status: 'success' | 'partial'
-  message: string
-  toast: string
-  data?: UploadDocResponse
-}
-
-function getStepState(step: 'uploading' | 'extracting' | 'complete', phase: UploadPhase): UploadStepState {
-  if (step === 'uploading') {
-    if (phase === 'uploading') return 'current'
-    if (phase === 'extracting' || phase === 'complete' || phase === 'partial') return 'complete'
-    return phase === 'error' ? 'failed' : 'upcoming'
-  }
-  if (step === 'extracting') {
-    if (phase === 'extracting') return 'current'
-    if (phase === 'complete') return 'complete'
-    if (phase === 'partial') return 'failed'
-    return 'upcoming'
-  }
-  if (phase === 'complete') return 'complete'
-  if (phase === 'partial' || phase === 'error') return 'failed'
-  return 'upcoming'
-}
 
 function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
@@ -70,17 +44,14 @@ export function DocumentUploadZone({
   title,
   description,
 }: DocumentUploadZoneProps) {
-  const location = useLocation()
-  const { operations, startOperation } = useOperations()
+  const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [picked, setPicked] = useState<File | null>(null)
   const [docType, setDocType] = useState<DocType>(options[0]?.value ?? 'resume')
   const [uploadMsg, setUploadMsg] = useState<UploadMessage | null>(null)
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle')
-  const isProcessing = operations.some((operation) => (
-    operation.kind === 'document-upload' && operation.status === 'running'
-  ))
+  const [uploadBytes, setUploadBytes] = useState<{ loaded: number; total: number | null }>({ loaded: 0, total: null })
 
   function pickFile(e: ChangeEvent<HTMLInputElement>) {
     setPicked(e.target.files?.[0] ?? null)
@@ -91,101 +62,84 @@ export function DocumentUploadZone({
   function onDrop(e: DragEvent<HTMLElement>) {
     e.preventDefault()
     setDragOver(false)
-    if (isProcessing) return
+    if (uploadMutation.isPending) return
     setPicked(e.dataTransfer.files?.[0] ?? null)
     setUploadMsg(null)
     setUploadPhase('idle')
   }
 
-  async function upload(file: File) {
-    setUploadMsg(null)
-    setUploadPhase('uploading')
-    try {
-      const result = await startOperation<UploadTaskResult>({
-        kind: 'document-upload',
-        title: `上传资料：${file.name}`,
-        route: location.pathname,
-        steps: onUploaded
-          ? [{ label: '上传并建立索引' }, { label: '提取能力档案' }, { label: '完成' }]
-          : [{ label: '上传并建立索引' }, { label: '完成' }],
-        invalidate: [['docs'], ['profile']],
-        summary: (task) => task.message,
-        isPartial: (task) => task.status === 'partial',
-        execute: async ({ advance }): Promise<UploadTaskResult> => {
-          const fd = new FormData()
-          fd.append('file', file)
-          fd.append('doc_type', docType)
-          const send = (opts: { confirmCloud: boolean }) =>
-            post<UploadDocResponse>('/api/docs/upload', fd, {
-              query: { confirm_cloud: opts.confirmCloud },
-            })
-
-          advance(0, '正在上传文件并建立索引。')
-          let data: UploadDocResponse
-          let cloudConfirmed = false
-          try {
-            data = await send({ confirmCloud: false })
-          } catch (err) {
-            try {
-              data = await requestWithCloudConfirm(send, err)
-              cloudConfirmed = true
-            } catch (confirmError) {
-              if (isCloudConfirmError((confirmError as { body?: unknown }).body)) {
-                return {
-                  status: 'partial',
-                  message: '检测到敏感信息。已取消发送到云端，本次没有完成入库；如需继续，请重新上传并同意发送。',
-                  toast: '已取消敏感资料的云端处理',
-                }
-              }
-              throw confirmError
-            }
-          }
-
-          const prefix = data.skipped ? '上传成功（同一文件已入库，本次跳过）' : '上传成功'
-          const baseText = `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`
-          if (!onUploaded) {
-            return { status: 'success', message: baseText, toast: `已上传《${data.filename}》（${data.n_chunks} 块）`, data }
-          }
-
-          setUploadPhase('extracting')
-          advance(1, '文件已入库，正在提取能力档案。')
-          try {
-            await onUploaded(data, { cloudConfirmed })
-            return {
-              status: 'success',
-              message: `${baseText}，已完成能力抽取，可以开始出题练习。`,
-              toast: `已上传《${data.filename}》，并完成能力抽取`,
-              data,
-            }
-          } catch (err) {
-            const body = (err as { body?: { detail?: string; retryable?: boolean } }).body
-            const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
-            const retryHint = body?.retryable
-              ? '云端能力抽取暂时失败，请稍后到知识档案页重试。'
-              : '能力抽取未完成，请到知识档案页重试。'
-            return {
-              status: 'partial',
-              message: `${baseText}。简历已保存，但${retryHint}${detail}`,
-              toast: `《${data.filename}》已保存，但能力抽取未完成`,
-              data,
-            }
-          }
-        },
-      })
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('doc_type', docType)
+      const send = (opts: { confirmCloud: boolean }) => {
+        setUploadBytes({ loaded: 0, total: file.size })
+        return postFormDataWithProgress<UploadDocResponse>('/api/docs/upload', fd, {
+          query: { confirm_cloud: opts.confirmCloud },
+          onProgress: setUploadBytes,
+        })
+      }
+      try {
+        return { data: await send({ confirmCloud: false }), cloudConfirmed: false }
+      } catch (err) {
+        return {
+          data: await requestWithCloudConfirm(send, err),
+          cloudConfirmed: true,
+        }
+      }
+    },
+    onSuccess: async ({ data, cloudConfirmed }) => {
+      void queryClient.invalidateQueries({ queryKey: ['docs'] })
+      void queryClient.invalidateQueries({ queryKey: ['profile'] })
       setPicked(null)
       if (fileRef.current) fileRef.current.value = ''
-      setUploadPhase(result.status === 'success' ? 'complete' : 'partial')
-      setUploadMsg({ status: result.status, text: result.message })
-      onToast(result.toast, result.status === 'success' ? 'success' : 'error')
-    } catch (err) {
-      const body = (err as { body?: { detail?: string } }).body
+      const prefix = data.skipped ? '上传成功（同一文件已入库，本次跳过）' : '上传成功'
+      const baseText = `${prefix}：${data.filename}，切块 ${data.n_chunks}，标记 ${data.sensitivity === 'local_only' ? '仅本机' : '可用云端'}${data.scanned ? '，提示：疑似扫描件' : ''}`
+
+      if (!onUploaded) {
+        setUploadPhase('complete')
+        setUploadMsg({ status: 'success', text: baseText })
+        onToast(`已上传《${data.filename}》（${data.n_chunks} 块）`, 'success')
+        return
+      }
+
+      setUploadPhase('extracting')
+      try {
+        await onUploaded(data, { cloudConfirmed })
+        setUploadPhase('complete')
+        setUploadMsg({ status: 'success', text: `${baseText}，已完成能力抽取，可以开始出题练习。` })
+        onToast(`已上传《${data.filename}》，并完成能力抽取`, 'success')
+      } catch (err) {
+        const body = (err as { body?: { detail?: string; retryable?: boolean } }).body
+        const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
+        const retryHint = body?.retryable
+          ? '云端能力抽取暂时失败，请稍后到知识档案页重试。'
+          : '能力抽取未完成，请到知识档案页重试。'
+        setUploadPhase('partial')
+        setUploadMsg({
+          status: 'partial',
+          text: `${baseText}。简历已保存，但${retryHint}${detail}`,
+        })
+        onToast(`《${data.filename}》已保存，但能力抽取未完成`, 'error')
+      }
+    },
+    onError: (err) => {
+      const body = (err as { body?: unknown }).body
+      if (isCloudConfirmError(body)) {
+        setUploadPhase('partial')
+        setUploadMsg({
+          status: 'partial',
+          text: '检测到敏感信息。已取消发送到云端，本次没有完成入库；如需继续，请重新上传并同意发送。',
+        })
+        return
+      }
+      const text = err instanceof Error ? err.message : String(err)
+      const detail = (body as { detail?: string } | undefined)?.detail
       setUploadPhase('error')
-      setUploadMsg({
-        status: 'error',
-        text: body?.detail || (err instanceof Error ? err.message : String(err)),
-      })
-    }
-  }
+      setUploadMsg({ status: 'error', text: detail || text })
+    },
+  })
 
   function submit() {
     if (!picked) {
@@ -200,12 +154,16 @@ export function DocumentUploadZone({
     }
     setUploadMsg(null)
     setUploadPhase('uploading')
-    void upload(picked)
+    uploadMutation.mutate(picked)
   }
 
+  const isProcessing = uploadMutation.isPending
   const showProgress = uploadPhase !== 'idle'
+  const uploadPercent = uploadBytes.total && uploadBytes.total > 0
+    ? Math.min(100, Math.round((uploadBytes.loaded / uploadBytes.total) * 100))
+    : null
   const phaseText = uploadPhase === 'uploading'
-    ? '正在上传文件并建立索引…'
+    ? uploadPercent === 100 ? '文件已发送，正在建立索引…' : '正在上传文件…'
     : uploadPhase === 'extracting'
       ? '文件已入库，正在提取能力档案…'
       : uploadPhase === 'complete'
@@ -215,7 +173,6 @@ export function DocumentUploadZone({
           : uploadPhase === 'error'
             ? '上传流程未完成。'
             : ''
-  const finalStepLabel = uploadPhase === 'partial' ? '部分完成' : uploadPhase === 'error' ? '未完成' : '完成'
 
   return (
     <section className="card card-raised mb-6">
@@ -304,24 +261,24 @@ export function DocumentUploadZone({
       </div>
 
       {showProgress ? (
-        <div className={`upload-progress ${uploadPhase === 'error' || uploadPhase === 'partial' ? 'is-failure' : ''}`} role="status" aria-live="polite" aria-atomic="true">
-          <div className="upload-progress-phase">{phaseText}</div>
-          <ol className="upload-progress-steps" aria-label="上传处理进度">
-            <li className={`upload-progress-step is-${getStepState('uploading', uploadPhase)}`} aria-current={uploadPhase === 'uploading' ? 'step' : undefined}>
-              <span className="upload-progress-marker" aria-hidden="true">1</span>
-              <span>上传并建立索引</span>
-            </li>
-            {onUploaded ? (
-              <li className={`upload-progress-step is-${getStepState('extracting', uploadPhase)}`} aria-current={uploadPhase === 'extracting' ? 'step' : undefined}>
-                <span className="upload-progress-marker" aria-hidden="true">2</span>
-                <span>提取能力档案</span>
-              </li>
-            ) : null}
-            <li className={`upload-progress-step is-${getStepState('complete', uploadPhase)}`} aria-current={uploadPhase === 'complete' || uploadPhase === 'partial' || uploadPhase === 'error' ? 'step' : undefined}>
-              <span className="upload-progress-marker" aria-hidden="true">{onUploaded ? '3' : '2'}</span>
-              <span>{finalStepLabel}</span>
-            </li>
-          </ol>
+        <div className={`inline-progress ${uploadPhase === 'error' || uploadPhase === 'partial' ? 'is-failure' : ''}`} role="status" aria-live="polite" aria-atomic="true">
+          <div className="inline-progress-label">
+            <span>{phaseText}</span>
+            {uploadPhase === 'uploading' && uploadPercent !== null ? <strong>{uploadPercent}%</strong> : null}
+          </div>
+          <div
+            className={`inline-progress-track ${uploadPhase === 'uploading' && uploadPercent === null ? 'is-indeterminate' : ''}`}
+            role={uploadPercent !== null ? 'progressbar' : undefined}
+            aria-label="文件上传进度"
+            aria-valuemin={uploadPercent !== null ? 0 : undefined}
+            aria-valuemax={uploadPercent !== null ? 100 : undefined}
+            aria-valuenow={uploadPercent ?? undefined}
+          >
+            <span className="inline-progress-fill" style={{ width: `${uploadPercent ?? 100}%` }} />
+          </div>
+          {uploadPhase === 'uploading' && uploadPercent !== null ? (
+            <div className="inline-progress-detail">已发送 {formatBytes(uploadBytes.loaded)} / {formatBytes(uploadBytes.total ?? 0)}</div>
+          ) : null}
         </div>
       ) : null}
 

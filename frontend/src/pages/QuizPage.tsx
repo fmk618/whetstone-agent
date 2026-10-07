@@ -6,7 +6,6 @@ import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
 import { Select } from '../components/Select'
-import { useOperations } from '../components/OperationProvider'
 import type {
   AnswerIn,
   AnswerRecord,
@@ -359,7 +358,12 @@ function ErrorBar({ message, onRetry }: { message: string; onRetry: () => void }
 }
 
 /** 生成题目工具条:层 / 题数;点击「生成题目」→ 创建会话 + 拉题 */
-function GenerateToolbar() {
+function GenerateToolbar({
+  onToast,
+}: {
+  onToast: (text: string, kind?: 'success' | 'error' | 'info') => void
+}) {
+  const queryClient = useQueryClient()
   const [layer, setLayer] = useState<Layer>('resume')
   const [total, setTotal] = useState(3)
   const [formError, setFormError] = useState<string | null>(null)
@@ -371,61 +375,64 @@ function GenerateToolbar() {
 
   const latestSession = sessionsQuery.data?.[0]
 
-  const { operations, startOperation } = useOperations()
-  const isGenerating = operations.some((operation) => (
-    operation.kind === 'quiz-generate' && operation.status === 'running'
-  ))
-
-  async function generate() {
-    setFormError(null)
-    try {
-      await startOperation<{ sessionId: number; out: QuestionsOut }>({
-        kind: 'quiz-generate',
-        title: '生成练习题目',
-        route: '/quiz',
-        steps: [
-          { label: '创建练习会话' },
-          { label: '检索资料并调用模型' },
-          { label: '保存生成结果' },
-        ],
-        invalidate: [['quiz', 'sessions'], ['quiz', 'latest-session']],
-        summary: ({ out }) => out.message || `已生成 ${out.generated} 题，可以开始练习。`,
-        execute: async ({ advance }) => {
-          advance(0, '正在创建练习会话。')
-          const studio = await post<QuizSession>('/api/quiz/sessions', {
-            kind: 'quiz',
-            title: `练习 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
-          })
-          const sessionId = studio.id
-          const body: QuestionsIn = { layer, total }
-          const send = (opts: { confirmCloud: boolean }) =>
-            post<QuestionsOut>(`/api/quiz/sessions/${sessionId}/questions`, {
-              ...body,
-              confirm_cloud: opts.confirmCloud,
-            })
-          advance(1, '正在检索资料并由模型生成题目。')
-          let out: QuestionsOut
-          try {
-            out = await send({ confirmCloud: false })
-          } catch (err) {
-            out = await requestWithCloudConfirm(send, err)
-          }
-          advance(2, '题目已生成，正在保存结果。')
-          return { sessionId, out }
-        },
+  const generateMutation = useMutation({
+    mutationFn: async (opts: { reuse: boolean; confirmCloud: boolean }) => {
+      // 1. 无复用会话就先创建一个(kind=quiz)
+      let sessionId: number
+      if (opts.reuse && latestSession) {
+        sessionId = latestSession.id
+      } else {
+        const studio = await post<QuizSession>('/api/quiz/sessions', {
+          kind: 'quiz',
+          title: `练习 ${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+        })
+        sessionId = studio.id
+      }
+      // 2. 出题:契约以 routes_quiz.QuestionsIn 为准 {layer, pack_id, total,
+      //    confirm_cloud}(confirm_cloud 在 JSON body,不是 query)。
+      const body: QuestionsIn = {
+        layer,
+        total,
+      }
+      const send = (o: { confirmCloud: boolean }) =>
+        post<QuestionsOut>(`/api/quiz/sessions/${sessionId}/questions`, {
+          ...body,
+          confirm_cloud: o.confirmCloud,
+        })
+      try {
+        return { sessionId, out: await send({ confirmCloud: false }) }
+      } catch (err) {
+        const out = await requestWithCloudConfirm(send, err)
+        return { sessionId, out }
+      }
+    },
+    onSuccess: ({ out, sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['quiz', 'latest-session'] })
+      setFormError(null)
+      // 生成为 0 时后端附 message 解释(如检索不到资料片段)
+      if (out.message) onToast(out.message, 'info')
+      else onToast(`生成完成:${out.generated} 题(会话 ${sessionId} 已保留)`, 'success')
+      // 本轮可能落在旧会话上;立即把详情拉到最新
+      void queryClient.fetchQuery({
+        queryKey: ['quiz', 'latest-session'],
+        queryFn: async () => await get<QuizSession>(`/api/quiz/sessions/${sessionId}`),
       })
-    } catch (err) {
-      setFormError(detailOf(err, '生成失败，请稍后重试'))
-    }
-  }
+    },
+    onError: (err) => {
+      setFormError(detailOf(err, '生成失败,请稍后重试'))
+    },
+  })
 
-  const submittable = !isGenerating && !sessionsQuery.isLoading
+  const submittable =
+    !generateMutation.isPending && !sessionsQuery.isLoading
 
   // 生成的题目从“最新会话”拉;在 QueryClient 缓存里挑出本轮 session 的题
   const generatedQuestions = latestSession?.questions ?? []
 
   function submit() {
-    void generate()
+    setFormError(null)
+    generateMutation.mutate({ reuse: false, confirmCloud: false })
   }
 
   return (
@@ -467,17 +474,26 @@ function GenerateToolbar() {
           disabled={!submittable}
           onClick={submit}
         >
-          {isGenerating ? '生成中…（可切换页面）' : '生成题目'}
+          {generateMutation.isPending ? '生成中…(检索+LLM 出题)' : '生成题目'}
         </button>
       </div>
 
-      {formError ? (
-        <div className="mt-3">
-          <ErrorBar message={formError} onRetry={() => void generate()} />
+      {generateMutation.isPending ? (
+        <div className="inline-progress" role="status" aria-live="polite">
+          <div className="inline-progress-label"><span>正在检索资料并由模型生成题目…</span></div>
+          <div className="inline-progress-track is-indeterminate" aria-label="题目生成处理中">
+            <span className="inline-progress-fill" />
+          </div>
         </div>
       ) : null}
 
-      {operations.some((operation) => operation.kind === 'quiz-generate' && operation.status === 'success') ? (
+      {formError ? (
+        <div className="mt-3">
+          <ErrorBar message={formError} onRetry={() => generateMutation.mutate({ reuse: false, confirmCloud: false })} />
+        </div>
+      ) : null}
+
+      {generateMutation.isSuccess ? (
         <p className="mt-3 text-xs" style={{ color: 'var(--success)' }}>
           已生成 {generatedQuestions.length} 题,见下方题卡。
         </p>
@@ -573,12 +589,12 @@ export default function QuizPage() {
             onRetry={() => void detailQuery.refetch()}
           />
           <div className="mt-4">
-            <GenerateToolbar />
+            <GenerateToolbar onToast={show} />
           </div>
         </div>
       ) : (
         <>
-          <GenerateToolbar />
+          <GenerateToolbar onToast={show} />
           <QuestionList latestSession={detailQuery.data} onToast={show} />
           {!detailQuery.isLoading && !detailQuery.data?.questions?.length ? <EmptyQuestionList /> : null}
         </>
