@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { get, post } from '../api/client'
 import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
@@ -13,7 +13,7 @@ import type {
   Provenance,
   Question,
   QuestionsIn,
-  QuestionsOut,
+  QuizQuestionTask,
   QuizSession,
 } from '../api/types'
 
@@ -357,7 +357,16 @@ function ErrorBar({ message, onRetry }: { message: string; onRetry: () => void }
   )
 }
 
-/** 生成题目工具条:层 / 题数;点击「生成题目」→ 创建会话 + 拉题 */
+/** 生成题目工具条:层 / 题数;点击「生成题目」→ 创建会话 + 异步任务 */
+function taskProgressPercent(task: QuizQuestionTask | null): number {
+  if (!task) return 0
+  const completedUnits = Number(task.completed)
+  const totalUnits = Number(task.total)
+  if (!Number.isFinite(completedUnits) || !Number.isFinite(totalUnits) || totalUnits <= 0) return 0
+  return Math.min(100, Math.max(0, Math.round((completedUnits / totalUnits) * 100)))
+}
+
+/** 生成题目工具条:创建后台任务并在本页轮询真实生成进度。 */
 function GenerateToolbar({
   onToast,
 }: {
@@ -367,6 +376,10 @@ function GenerateToolbar({
   const [layer, setLayer] = useState<Layer>('resume')
   const [total, setTotal] = useState(3)
   const [formError, setFormError] = useState<string | null>(null)
+  const [task, setTask] = useState<QuizQuestionTask | null>(null)
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [taskProgress, setTaskProgress] = useState(0)
+  const [taskPollError, setTaskPollError] = useState<string | null>(null)
 
   const sessionsQuery = useQuery({
     queryKey: ['quiz', 'sessions'],
@@ -388,50 +401,94 @@ function GenerateToolbar({
         })
         sessionId = studio.id
       }
-      // 2. 出题:契约以 routes_quiz.QuestionsIn 为准 {layer, pack_id, total,
-      //    confirm_cloud}(confirm_cloud 在 JSON body,不是 query)。
+      // 2. 创建持久化出题任务;任务创建成功后由页面每 400ms 拉取状态。
       const body: QuestionsIn = {
         layer,
         total,
       }
       const send = (o: { confirmCloud: boolean }) =>
-        post<QuestionsOut>(`/api/quiz/sessions/${sessionId}/questions`, {
+        post<QuizQuestionTask>(`/api/quiz/sessions/${sessionId}/question-tasks`, {
           ...body,
           confirm_cloud: o.confirmCloud,
         })
       try {
-        return { sessionId, out: await send({ confirmCloud: false }) }
+        return { sessionId, task: await send({ confirmCloud: false }) }
       } catch (err) {
-        const out = await requestWithCloudConfirm(send, err)
-        return { sessionId, out }
+        const task = await requestWithCloudConfirm(send, err)
+        return { sessionId, task }
       }
     },
-    onSuccess: ({ out, sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
-      queryClient.invalidateQueries({ queryKey: ['quiz', 'latest-session'] })
+    onSuccess: ({ task: createdTask }) => {
       setFormError(null)
-      // 生成为 0 时后端附 message 解释(如检索不到资料片段)
-      if (out.message) onToast(out.message, 'info')
-      else onToast(`生成完成:${out.generated} 题(会话 ${sessionId} 已保留)`, 'success')
-      // 本轮可能落在旧会话上;立即把详情拉到最新
-      void queryClient.fetchQuery({
-        queryKey: ['quiz', 'latest-session'],
-        queryFn: async () => await get<QuizSession>(`/api/quiz/sessions/${sessionId}`),
-      })
+      setTaskPollError(null)
+      setTask(createdTask)
+      setTaskProgress(taskProgressPercent(createdTask))
+      setTaskId(createdTask.terminal ? null : createdTask.task_id)
     },
     onError: (err) => {
-      setFormError(detailOf(err, '生成失败,请稍后重试'))
+      setTaskId(null)
+      setFormError(detailOf(err, '生成任务创建失败,请稍后重试'))
     },
   })
 
-  const submittable =
-    !generateMutation.isPending && !sessionsQuery.isLoading
+  const retry = () => {
+    setFormError(null)
+    setTaskPollError(null)
+    setTask(null)
+    setTaskProgress(0)
+    setTaskId(null)
+    generateMutation.mutate({ reuse: false, confirmCloud: false })
+  }
 
-  // 生成的题目从“最新会话”拉;在 QueryClient 缓存里挑出本轮 session 的题
-  const generatedQuestions = latestSession?.questions ?? []
+  useEffect(() => {
+    if (!taskId) return
+
+    let disposed = false
+    let intervalId: ReturnType<typeof setInterval> | null = null
+    const poll = async () => {
+      try {
+        const next = await get<QuizQuestionTask>(`/api/quiz/question-tasks/${taskId}`)
+        if (disposed) return
+        setTask(next)
+        // 进度只由后端的 completed/total 工作单元计算,并保持本页显示单调不回退。
+        setTaskProgress((previous) => Math.max(previous, taskProgressPercent(next)))
+        if (next.terminal) {
+          setTaskId(null)
+          if (next.status === 'completed' && next.result?.status !== 'no_evidence') {
+            void queryClient.invalidateQueries({ queryKey: ['quiz', 'sessions'] })
+            void queryClient.invalidateQueries({ queryKey: ['quiz', 'latest-session'] })
+            onToast(`生成完成:${next.result?.generated ?? 0} 题(会话 ${next.session_id} 已保留)`, 'success')
+          }
+        }
+      } catch (err) {
+        if (disposed) return
+        setTaskPollError(detailOf(err, '读取生成进度失败,请重试'))
+        setTaskId(null)
+      }
+    }
+
+    void poll()
+    intervalId = setInterval(() => {
+      void poll()
+    }, 400)
+    return () => {
+      disposed = true
+      if (intervalId !== null) clearInterval(intervalId)
+    }
+  }, [taskId, queryClient, onToast])
+
+  const isTaskActive = taskId !== null
+  const isBusy = generateMutation.isPending || isTaskActive
+  const submittable = !isBusy && !sessionsQuery.isLoading
+  const taskIsNoEvidence = task?.status === 'completed' && task.result?.status === 'no_evidence'
+  const taskIsFailed = task?.status === 'failed'
 
   function submit() {
     setFormError(null)
+    setTaskPollError(null)
+    setTask(null)
+    setTaskProgress(0)
+    setTaskId(null)
     generateMutation.mutate({ reuse: false, confirmCloud: false })
   }
 
@@ -474,28 +531,65 @@ function GenerateToolbar({
           disabled={!submittable}
           onClick={submit}
         >
-          {generateMutation.isPending ? '生成中…(检索+LLM 出题)' : '生成题目'}
+          {generateMutation.isPending ? '准备生成任务…' : isTaskActive ? '生成中…' : '生成题目'}
         </button>
       </div>
 
-      {generateMutation.isPending ? (
+      {isTaskActive && task ? (
         <div className="inline-progress" role="status" aria-live="polite">
-          <div className="inline-progress-label"><span>正在检索资料并由模型生成题目…</span></div>
-          <div className="inline-progress-track is-indeterminate" aria-label="题目生成处理中">
-            <span className="inline-progress-fill" />
+          <div className="inline-progress-label">
+            <span>{task.detail || '正在检索资料并生成题目…'}</span>
+            <strong>{taskProgress}%</strong>
           </div>
+          <div
+            className="inline-progress-track"
+            role="progressbar"
+            aria-label="题目生成进度"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={taskProgress}
+          >
+            <span className="inline-progress-fill" style={{ width: `${taskProgress}%` }} />
+          </div>
+        </div>
+      ) : null}
+
+      {taskPollError ? (
+        <div className="mt-3">
+          <ErrorBar message={taskPollError} onRetry={retry} />
+        </div>
+      ) : null}
+
+      {taskIsNoEvidence ? (
+        <div className="upload-message is-error mt-3" role="alert">
+          <strong>暂未生成题目</strong>
+          <span>{task?.result?.message ?? '未检索到可用的资料证据。'}</span>
+          <span>操作建议：{task?.result?.action ?? '上传或补充相关资料，完成能力档案提取后重试。'}</span>
+          <button type="button" className="btn btn-ghost btn-sm self-start" onClick={retry}>
+            重新生成
+          </button>
+        </div>
+      ) : null}
+
+      {taskIsFailed ? (
+        <div className="upload-message is-error mt-3" role="alert">
+          <strong>题目生成失败</strong>
+          <span>{task?.error ?? task?.detail ?? '生成任务失败，请稍后重试。'}</span>
+          <button type="button" className="btn btn-ghost btn-sm self-start" onClick={retry}>
+            重试
+          </button>
         </div>
       ) : null}
 
       {formError ? (
         <div className="mt-3">
-          <ErrorBar message={formError} onRetry={() => generateMutation.mutate({ reuse: false, confirmCloud: false })} />
+          <ErrorBar message={formError} onRetry={retry} />
         </div>
       ) : null}
 
-      {generateMutation.isSuccess ? (
+      {task?.status === 'completed' && task.result?.status !== 'no_evidence' && task.result?.generated ? (
         <p className="mt-3 text-xs" style={{ color: 'var(--success)' }}>
-          已生成 {generatedQuestions.length} 题,见下方题卡。
+          已生成 {task.result.generated} 题，见下方题卡。
         </p>
       ) : null}
     </section>

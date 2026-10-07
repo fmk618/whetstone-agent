@@ -142,8 +142,30 @@ export interface QuestionsOut {
   pack: string
   generated: number
   questions: QuizQuestion[]
+  /** 异步出题任务的终态; no_evidence 表示任务完成但没有可用证据。 */
+  status?: 'completed' | 'no_evidence'
+  code?: 'no_evidence'
   /** 生成为 0 时后端附带的解释文案 */
   message?: string
+  /** no_evidence/failed 时给出的下一步操作建议 */
+  action?: string
+}
+
+export type QuizTaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+/** POST /api/quiz/sessions/{id}/question-tasks 与轮询响应。 */
+export interface QuizQuestionTask {
+  id: string
+  task_id: string
+  session_id: number
+  status: QuizTaskStatus
+  /** 后端以 completed/total 表示已完成和总工作单元。 */
+  completed: number
+  total: number
+  detail: string
+  error?: string | null
+  result?: QuestionsOut | null
+  terminal: boolean
 }
 
 /** POST /api/quiz/questions/{qid}/answer 请求体(confirm_cloud 在 body) */

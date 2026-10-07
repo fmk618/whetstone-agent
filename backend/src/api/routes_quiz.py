@@ -1,8 +1,11 @@
 # 会话/题目/作答/复习(P1 阶段题目生成与评分是占位,会话 CRUD 完整可用)
 from __future__ import annotations
 
+import asyncio
 import json
+import uuid
 from datetime import date, timedelta
+from typing import Awaitable, Callable
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
@@ -201,15 +204,19 @@ def export_session(session_id: int) -> Response:
 
 # -- 题目生成(generator 接入) --------------------------------------------------
 
-@router.post("/sessions/{session_id}/questions")
-async def create_questions(session_id: int, body: QuestionsIn) -> dict:
-    from ..agents.generator import dedupe, generate_questions
+NO_EVIDENCE_MESSAGE = (
+    "未检索到与所选能力项相关的资料证据,因此没有生成题目。"
+    "请上传或补充相关资料,并完成能力档案提取后重试。"
+)
+
+_task_handles: set[asyncio.Task] = set()
+
+
+def _generation_context(db: Database, session_id: int, body: QuestionsIn):
     from ..occupation.competency import allocate_question_counts
     from ..packs_loader import load_pack
 
-    db = deps.get_db()
     _get_session(db, session_id)
-
     claims_rows = _load_claims(db)
     if not claims_rows:
         raise HTTPException(
@@ -227,13 +234,32 @@ async def create_questions(session_id: int, body: QuestionsIn) -> dict:
     claims_pairs = [(c["competency"], c["strength"]) for c in claims_rows]
     matrix_items = _build_matrix(body.layer, pack, body.jd, claims_pairs)
     counts = allocate_question_counts(matrix_items, body.total)
+    return claims_rows, pack_id, claims_pairs, matrix_items, counts, _sens_markers(claims_rows)
 
-    markers = _sens_markers(claims_rows)
+
+async def _generate_questions_impl(
+    session_id: int,
+    body: QuestionsIn,
+    *,
+    progress: Callable[[int, str], Awaitable[None] | None] | None = None,
+) -> dict:
+    from ..agents.generator import dedupe, generate_questions
+
+    db = deps.get_db()
+    claims_rows, pack_id, claims_pairs, matrix_items, counts, markers = (
+        _generation_context(db, session_id, body)
+    )
     rt = deps_agents.get_agent_router()
 
+    async def report(completed: int, detail: str):
+        if progress is None:
+            return
+        value = min(body.total, max(0, completed))
+        result = progress(value, detail)
+        if hasattr(result, "__await__"):
+            await result
+
     async def _embed(texts: list[str]) -> list[list[float]]:
-        # 敏感:检索 query 含 claim 原文;local_only 且路由目标为云端时
-        # Router 抛 PrivacyNotConfirmed(main 统一转 409 知情确认)
         return await embed_texts(rt, texts, sens_confirmed=body.confirm_cloud,
                                  sens_markers=markers)
 
@@ -241,9 +267,10 @@ async def create_questions(session_id: int, body: QuestionsIn) -> dict:
         deps_agents.generate_role_provider(rt, sens_confirmed=body.confirm_cloud,
                                            sens_markers=markers),
         get_retriever(), _embed, matrix_items, claims_pairs,
-        pack_id, counts, body.layer, jd_requirement=body.jd or "")
+        pack_id, counts, body.layer, jd_requirement=body.jd or "",
+        progress=report,
+    )
 
-    # 去重闸门:同批内 + 与本会话已有题(向量化一次并缓存;dedupe 要求同步 embed_fn)
     prev_texts = [r["question"] for r in db.query(
         "SELECT question FROM questions WHERE session_id=?", (session_id,))]
     cue_texts = [q.question for q in questions] + prev_texts
@@ -277,9 +304,145 @@ async def create_questions(session_id: int, body: QuestionsIn) -> dict:
     out = {"session_id": session_id, "layer": body.layer, "pack": pack_id,
            "generated": len(saved), "questions": saved}
     if not saved:
-        out["message"] = ("所有能力项均未检索到资料片段,未生成题目;"
-                          "请确认已上传相关资料,或补充资料后重试。")
+        out.update({"status": "no_evidence", "code": "no_evidence",
+                    "message": NO_EVIDENCE_MESSAGE,
+                    "action": "上传或补充相关资料,完成能力档案提取后重试。"})
+    else:
+        out["status"] = "completed"
+    if progress is not None:
+        result = progress(body.total, "题目生成完成。")
+        if hasattr(result, "__await__"):
+            await result
     return out
+
+
+@router.post("/sessions/{session_id}/questions")
+async def create_questions(session_id: int, body: QuestionsIn) -> dict:
+    """The original endpoint remains synchronous-in-request for compatibility."""
+    return await _generate_questions_impl(session_id, body)
+
+
+# -- 持久化后台出题任务 --------------------------------------------------------
+
+def _task_out(row) -> dict:
+    item = dict(row)
+    item["task_id"] = item["id"]
+    if item.get("result_json"):
+        try:
+            item["result"] = json.loads(item["result_json"])
+        except (TypeError, json.JSONDecodeError):
+            item["result"] = item["result_json"]
+    else:
+        item["result"] = None
+    item.pop("result_json", None)
+    item["terminal"] = item["status"] in {"completed", "failed"}
+    return item
+
+
+def _update_task(
+    task_id: str,
+    *,
+    status: str | None = None,
+    completed: int | None = None,
+    detail: str | None = None,
+    result: dict | None = None,
+    error: str | None = None,
+    started: bool = False,
+    finished: bool = False,
+) -> None:
+    """Update a task without ever allowing completed to move backwards."""
+    db = deps.get_db()
+    sets = ["updated_at=datetime('now')"]
+    params: list[object] = []
+    if status is not None:
+        sets.append("status=?")
+        params.append(status)
+    if completed is not None:
+        sets.append("completed=CASE WHEN ? > completed THEN ? ELSE completed END")
+        params.extend([completed, completed])
+    if detail is not None:
+        sets.append("detail=?")
+        params.append(detail)
+    if result is not None:
+        sets.append("result_json=?")
+        params.append(json.dumps(result, ensure_ascii=False))
+    if error is not None:
+        sets.append("error=?")
+        params.append(error)
+    if started:
+        sets.append("started_at=COALESCE(started_at, datetime('now'))")
+    if finished:
+        sets.append("finished_at=datetime('now')")
+    params.append(task_id)
+    db.exec(f"UPDATE quiz_tasks SET {', '.join(sets)} WHERE id=?", tuple(params))
+
+
+async def _run_question_task(task_id: str, session_id: int, payload: dict) -> None:
+    _update_task(task_id, status="running", detail="正在准备出题。", started=True)
+
+    async def progress(completed: int, detail: str) -> None:
+        _update_task(task_id, status="running", completed=completed, detail=detail)
+
+    try:
+        body = QuestionsIn.model_validate(payload)
+        result = await _generate_questions_impl(session_id, body, progress=progress)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else json.dumps(
+            exc.detail, ensure_ascii=False)
+        _update_task(task_id, status="failed", detail=detail, error=detail,
+                     finished=True)
+        return
+    except Exception as exc:
+        detail = f"题目生成失败:{exc}"
+        _update_task(task_id, status="failed", detail=detail, error=detail,
+                     finished=True)
+        return
+
+    _update_task(task_id, status="completed", completed=body.total,
+                 detail=(result.get("message") if result.get("status") == "no_evidence"
+                         else "题目生成完成。"), result=result, finished=True)
+
+
+def _start_question_task(task_id: str, session_id: int, payload: dict) -> None:
+    handle = asyncio.create_task(_run_question_task(task_id, session_id, payload))
+    _task_handles.add(handle)
+    handle.add_done_callback(_task_handles.discard)
+
+
+def _get_task(task_id: str, session_id: int | None = None):
+    db = deps.get_db()
+    row = db.one("SELECT * FROM quiz_tasks WHERE id=?", (task_id,))
+    if row is None or (session_id is not None and row["session_id"] != session_id):
+        raise HTTPException(status_code=404, detail=f"出题任务不存在: {task_id}")
+    return row
+
+
+@router.post("/sessions/{session_id}/question-tasks", status_code=202)
+async def create_question_task(session_id: int, body: QuestionsIn) -> dict:
+    db = deps.get_db()
+    claims_rows, _, _, _, _, markers = _generation_context(db, session_id, body)
+    rt = deps_agents.get_agent_router()
+    rt.route("embed", sens_confirmed=body.confirm_cloud, sens_markers=markers)
+    rt.route("generate", sens_confirmed=body.confirm_cloud, sens_markers=markers)
+
+    task_id = uuid.uuid4().hex
+    db.exec(
+        """INSERT INTO quiz_tasks (id, session_id, status, completed, total, detail)
+           VALUES (?, ?, 'pending', 0, ?, ?)""",
+        (task_id, session_id, body.total, "任务已排队,准备生成题目。"),
+    )
+    _start_question_task(task_id, session_id, body.model_dump())
+    return _task_out(_get_task(task_id))
+
+
+@router.get("/question-tasks/{task_id}")
+def get_question_task(task_id: str) -> dict:
+    return _task_out(_get_task(task_id))
+
+
+@router.get("/sessions/{session_id}/question-tasks/{task_id}")
+def get_session_question_task(session_id: int, task_id: str) -> dict:
+    return _task_out(_get_task(task_id, session_id))
 
 
 # -- 作答评分(evaluator 接入)---------------------------------------------------
