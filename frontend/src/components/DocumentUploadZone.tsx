@@ -125,12 +125,15 @@ export function DocumentUploadZone({
         setUploadMsg({ status: 'success', text: `${baseText}，已完成能力抽取，可以开始出题练习。` })
         onToast(`已上传《${data.filename}》，并完成能力抽取`, 'success')
       } catch (err) {
-        const body = (err as { body?: { detail?: string } }).body
+        const body = (err as { body?: { detail?: string; retryable?: boolean } }).body
         const detail = body?.detail || (err instanceof Error ? err.message : '请到知识档案页重试')
+        const retryHint = body?.retryable
+          ? '云端能力抽取暂时失败，请稍后到知识档案页重试。'
+          : '能力抽取未完成，请到知识档案页重试。'
         setUploadPhase('partial')
         setUploadMsg({
           status: 'partial',
-          text: `${baseText}。简历已保存，但能力抽取未完成，请到知识档案页重试。${detail}`,
+          text: `${baseText}。简历已保存，但${retryHint}${detail}`,
         })
         onToast(`《${data.filename}》已保存，但能力抽取未完成`, 'error')
       }

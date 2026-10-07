@@ -319,6 +319,64 @@ async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_profile_provider_connection_failure_is_retryable(
+        client: AsyncClient, tmp_env, monkeypatch, fake_embed):
+    """上游模型断连返回安全的 502,并保留既有能力声明。"""
+    r = await client.post(
+        "/api/docs/upload",
+        files={"file": ("resume.md", MD_WITH_PHONE.encode("utf-8"), "text/markdown")},
+        data={"doc_type": "resume"},
+    )
+    assert r.status_code == 200
+    doc_id = r.json()["doc_id"]
+
+    tmp_env.exec(
+        """INSERT INTO profile_claims
+           (doc_id, competency, ctype, claim_text, strength, source_file)
+           VALUES (?, '已有能力', 'skill', '保留这条声明', 'listed_only', 'resume.md')""",
+        (doc_id,),
+    )
+
+    import httpx
+    import openai
+    from src.llm.router import RouteDecision
+    import src.api.routes_docs as docs_mod
+
+    class _Registry:
+        def get(self, _provider_id):
+            return object()
+
+    class _ExtractRouter:
+        registry = _Registry()
+
+        def route(self, role, *, sens_confirmed=False, sens_markers=None):
+            return RouteDecision(provider_id="qwen", model="qwen-test", is_local=False)
+
+    async def _connection_failure(*args, **kwargs):
+        raise openai.APIConnectionError(
+            message="secret sk-test-key at https://qwen.example/v1/chat/completions",
+            request=httpx.Request("POST", "https://qwen.example/v1/chat/completions"),
+        )
+
+    monkeypatch.setattr(docs_mod, "get_router", lambda: _ExtractRouter())
+    monkeypatch.setattr(docs_mod, "extract_profile", _connection_failure)
+
+    r = await client.post(f"/api/docs/{doc_id}/profile/extract", params={"confirm_cloud": True})
+    assert r.status_code == 502
+    assert r.headers["retry-after"] == "5"
+    assert r.json() == {
+        "detail": "云端模型连接失败，请检查 Qwen API Key、模型配置或网络后重试。",
+        "code": "provider_unavailable",
+        "retryable": True,
+    }
+    assert "sk-test-key" not in r.text
+    assert "qwen.example" not in r.text
+    assert tmp_env.query(
+        "SELECT claim_text FROM profile_claims WHERE doc_id=?", (doc_id,)
+    )[0]["claim_text"] == "保留这条声明"
+
+
+@pytest.mark.asyncio
 async def test_sensitive_upload_cancel_cleans_uncommitted_raw(client: AsyncClient, tmp_env,
                                                               monkeypatch):
     import src.api.routes_docs as docs_mod
