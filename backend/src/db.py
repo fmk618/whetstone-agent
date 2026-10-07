@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS review_queue (
   done INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS quiz_tasks (
+  id TEXT PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending', -- pending|running|completed|failed
+  completed INTEGER NOT NULL DEFAULT 0,
+  total INTEGER NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  result_json TEXT,
+  error TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_quiz_tasks_session ON quiz_tasks(session_id);
 CREATE INDEX IF NOT EXISTS idx_answers_q ON answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_claims_doc ON profile_claims(doc_id);
 """

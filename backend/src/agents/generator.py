@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from typing import Callable, Protocol
+from typing import Awaitable, Callable, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -119,7 +119,9 @@ async def generate_questions(role_router, retriever, embed_fn: Callable[[list[st
                              matrix_items: list[tuple[CompetencyItem, MatchCategory]],
                              claims: list[tuple[str, str]], pack_id: str,
                              counts: dict[str, int], layer: QuestionLayer,
-                             *, jd_requirement: str = "") -> list[Question]:
+                             *, jd_requirement: str = "",
+                             progress: Callable[[int, str], Awaitable[None] | None] | None = None,
+                             ) -> list[Question]:
     """按能力项逐一生成题目(方案 7.4)。
 
     流程:能力名+类别 → 检索 query → embed_fn → HybridRetriever.search(personal 与
@@ -128,9 +130,18 @@ async def generate_questions(role_router, retriever, embed_fn: Callable[[list[st
     """
     skip_names = {name for name, n in counts.items() if n <= 0}
     out: list[Question] = []
+    completed = 0
+
+    async def report(detail: str) -> None:
+        if progress is None:
+            return
+        result = progress(completed, detail)
+        if hasattr(result, "__await__"):
+            await result
 
     for item, category in matrix_items:
-        if item.name in skip_names or counts.get(item.name, 0) <= 0:
+        item_total = max(counts.get(item.name, 0), 0)
+        if item.name in skip_names or item_total <= 0:
             continue
         query = f"{item.name} {category} 经历 证据 项目"
         embedding = await _as_list(embed_fn, query)
@@ -142,6 +153,8 @@ async def generate_questions(role_router, retriever, embed_fn: Callable[[list[st
             except Exception:
                 continue  # 检索失败按无片段处理
         if not snippets:
+            completed += item_total
+            await report(f"能力项「{item.name}」未检索到证据，已跳过。")
             continue  # 该能力项无片段 → 跳过(资料外知识只在已出题里标注,不硬生)
         prompt = _build_prompt(item.name, category, counts[item.name], layer,
                                pack_id, snippets, jd_requirement)
@@ -158,6 +171,8 @@ async def generate_questions(role_router, retriever, embed_fn: Callable[[list[st
             if not snippets and not q.provenance.reference:
                 q.provenance.reference = {"资料外知识": True}
             out.append(q)
+        completed += item_total
+        await report(f"能力项「{item.name}」处理完成，已生成 {len(result.questions[:item_total])} 题。")
     return out
 
 
