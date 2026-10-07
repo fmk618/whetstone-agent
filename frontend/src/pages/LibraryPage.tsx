@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { del, get, post } from '../api/client'
 import { requestWithCloudConfirm } from '../components/CloudConfirmDialog'
-import { DocumentUploadZone } from '../components/DocumentUploadZone'
+import { DocumentUploadZone, type UploadSuccessContext } from '../components/DocumentUploadZone'
 import { useToast } from '../components/Toast'
 import { PageHeader } from '../components/PageHeader'
 import { Reveal } from '../components/Motion'
@@ -32,7 +32,11 @@ const DOC_TYPE_META: Record<DocTypeLoose, { label: string; badge: string }> = {
 function SensitivityBadge({ level }: { level: LibraryDoc['sensitivity'] }) {
   if (level === 'local_only') {
     return (
-      <span className="badge badge-success">
+      <span
+        className="badge badge-success"
+        title="检测到敏感信息，默认不会发送到云端"
+        aria-label="仅本机：检测到敏感信息，默认不会发送到云端"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="4.5" y="10.5" width="15" height="9.5" rx="2" />
           <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
@@ -318,13 +322,13 @@ export default function LibraryPage() {
     queryFn: () => get<LibraryDoc[]>('/api/docs'),
   })
 
-  async function extractResume(data: UploadDocResponse) {
+  async function extractResume(data: UploadDocResponse, { cloudConfirmed }: UploadSuccessContext) {
     const send = (opts: { confirmCloud: boolean }) =>
       post(`/api/docs/${data.doc_id}/profile/extract`, {}, {
         query: { confirm_cloud: opts.confirmCloud },
       })
     try {
-      await send({ confirmCloud: false })
+      await send({ confirmCloud: cloudConfirmed })
     } catch (err) {
       await requestWithCloudConfirm(send, err)
     }

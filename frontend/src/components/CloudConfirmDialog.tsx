@@ -97,9 +97,12 @@ export function CloudConfirmDialog() {
         className="card w-full max-w-md"
         style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }}
       >
-        <h2 className="mb-2 text-base font-semibold">将内容发送到云端?</h2>
+        <h2 className="mb-2 text-base font-semibold">检测到敏感资料</h2>
         <p className="text-sm leading-6" style={{ color: 'var(--fg-muted)' }}>
-          {state.detail}
+          系统检测到手机号、邮箱或其他敏感信息。默认不会把原文发送到云端；本次上传、建立索引以及后续知识档案抽取需要发送给 Qwen，才能完成云端处理。
+        </p>
+        <p className="mt-2 text-sm" style={{ color: 'var(--fg-muted)' }}>
+          {state.detail} 同意后，本次资料处理会继续；取消则不会发送到云端，原文件仍在你的设备上，可稍后重试或配置本地模型。
         </p>
         <p className="mt-2 text-sm" style={{ color: 'var(--fg-muted)' }}>
           目标 provider:<span className="font-mono text-xs">{state.providerId}</span>
@@ -107,10 +110,10 @@ export function CloudConfirmDialog() {
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <button className="btn-ghost" onClick={() => closeConfirm(false)}>
-            取消,不上传
+            取消，仅保留在本机
           </button>
           <button className="btn-primary" onClick={() => closeConfirm(true)}>
-            我已知情,同意发送
+            同意发送给 Qwen
           </button>
         </div>
       </div>

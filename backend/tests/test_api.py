@@ -319,6 +319,28 @@ async def test_upload_md_list_and_delete(client: AsyncClient, tmp_env, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_sensitive_upload_cancel_cleans_uncommitted_raw(client: AsyncClient, tmp_env,
+                                                              monkeypatch):
+    import src.api.routes_docs as docs_mod
+    from src.llm.router import PrivacyNotConfirmed
+
+    class _RejectRouter:
+        def route(self, role, *, sens_confirmed=False, sens_markers=None):
+            raise PrivacyNotConfirmed("qwen")
+
+    monkeypatch.setattr(docs_mod, "get_router", lambda: _RejectRouter())
+    r = await client.post(
+        "/api/docs/upload",
+        files={"file": ("resume.md", MD_WITH_PHONE.encode("utf-8"), "text/markdown")},
+        data={"doc_type": "resume"},
+    )
+    assert r.status_code == 409
+    doc_id = __import__("hashlib").sha256(MD_WITH_PHONE.encode("utf-8")).hexdigest()
+    import src.config as config_mod
+    assert list(config_mod.settings.raw_dir.glob(f"{doc_id}.*")) == []
+    assert (await client.get("/api/docs")).json() == []
+
+@pytest.mark.asyncio
 async def test_upload_reference_goes_to_reference_collection(
         client: AsyncClient, tmp_env, fake_embed):
     md = "# 参考标准\n\n面试评分要点。"
